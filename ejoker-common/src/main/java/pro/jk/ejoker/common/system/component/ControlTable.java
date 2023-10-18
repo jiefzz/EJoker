@@ -25,12 +25,6 @@ public final class ControlTable {
         }
     }
 
-    public static void initOnce() {
-        if(!CONFIG_CACHE_STORE.isEmpty())
-            return;
-        REGISTER_TUPLE_DICT.forEach((_k, rt) -> ControlTable.getConfigValue(rt));
-    }
-
     public static String getConfigValue(String key, String defaultOverride) {
         // 在第一个配置值提供出去之前，都是可以通过provide方法来写入配置项的。
         initOnce();
@@ -152,11 +146,38 @@ public final class ControlTable {
 
     }
 
+    private static void initOnce() {
+        if(!CONFIG_CACHE_STORE.isEmpty())
+            return;
+        REGISTER_TUPLE_DICT.forEach((_k, rt) -> ControlTable.getConfigValue(rt));
+    }
+
     public static class RegisterTuple {
+
+        /**
+         * 配置项的key
+         */
         public final String key;
+
+        /**
+         * 对应的环境变量名
+         */
         public final String envKey;
+
+        /**
+         * 初始默认值
+         */
         public final String defaultValue;
+
+        /**
+         * 描述，一般用于打印日志
+         */
         private final String desc;
+
+        /**
+         * 验证方法，方法体由使用方提供，如此为string类型的参数值，
+         * <br />返回bool类型用以判断是否通过验证
+         */
         private final IFunction1<Boolean, String> va;
 
         private IFunction1<String, RegisterTuple> toStringAction = null;
@@ -181,10 +202,27 @@ public final class ControlTable {
             );
         }
 
+        /**
+         * 默认的事不带验证，va恒返回true
+         * @param key
+         * @param envKey
+         * @param defaultValue
+         * @param desc
+         * @return
+         */
         public static final RegisterTuple of(String key, String envKey, String defaultValue, String desc) {
             return new RegisterTuple(key, envKey, defaultValue, desc, v -> true);
         }
 
+        /**
+         * 这个版本的of是需要传入一个正则表达式作为验证的
+         * @param key
+         * @param envKey
+         * @param defaultValue
+         * @param desc
+         * @param regex 会根据个这个表达式生成pattern对象
+         * @return
+         */
         public static final RegisterTuple of(String key, String envKey, String defaultValue, String desc, String regex) {
             Pattern p= Pattern.compile(regex);
             RegisterTuple registerTuple = new RegisterTuple(key, envKey, defaultValue, desc, v -> p.matcher(v).matches());
@@ -197,6 +235,15 @@ public final class ControlTable {
             return registerTuple;
         }
 
+        /**
+         * 这个版本的va验证函数完全由用户提供
+         * @param key
+         * @param envKey
+         * @param defaultValue
+         * @param desc
+         * @param va
+         * @return
+         */
         public static final RegisterTuple of(String key, String envKey, String defaultValue, String desc, IFunction1<Boolean, String> va) {
             RegisterTuple registerTuple = new RegisterTuple(key, envKey, defaultValue, desc, va);
             registerTuple.toStringAction = rt -> StringUtilx.fmt(
@@ -235,7 +282,7 @@ public final class ControlTable {
                         ConfigKeyPrimary.EJOKER_ASYNC_EXECUTOR_POOL_SIZE,
                         "EJOKER_ASYNC_EXECUTOR_POOL_SIZE",
                         "" + (Runtime.getRuntime().availableProcessors() * 2 + 1),
-                        "EJ内部的核心异步任务池子的大小; 默认 取线程数的两倍 + 1 作为线程池大小",
+                        "EJ内部的核心异步任务池子的大小; 默认 取核心数的两倍 + 1 作为线程池大小",
                         "^\\d+$"
                 ),
                 RegisterTuple.of(
