@@ -9,6 +9,7 @@
 		<groupId>com.github.kimffy24</groupId>
 		<artifactId>ejoker-support</artifactId>
 		<version>3.0.7.1</version>
+		<relativePath />
 	</parent>
 	<artifactId>ejoker-support-mq-rocket-pull</artifactId>
 	
@@ -62,6 +63,14 @@
 			<artifactId>log4j-slf4j-impl</artifactId>
 			<scope>test</scope>
 		</dependency>
+
+		<!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-api -->
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-engine</artifactId>
+			<scope>test</scope>
+		</dependency>
+
 	</dependencies>
 
 	<build>

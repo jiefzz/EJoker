@@ -8,6 +8,7 @@
 		<groupId>com.github.kimffy24</groupId>
 		<artifactId>ejoker</artifactId>
 		<version>3.0.7.1</version>
+		<relativePath />
 	</parent>
 	<artifactId>ejoker-common</artifactId>
 
@@ -40,11 +41,6 @@
 	<!-- same information in all module : end -->
 
 	<dependencies>
-		<!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-api -->
-		<dependency>
-			<groupId>org.junit.jupiter</groupId>
-			<artifactId>junit-jupiter-engine</artifactId>
-		</dependency>
 
 		<!-- 日志组件 -->
 		<dependency>
@@ -68,7 +64,14 @@
 			<artifactId>log4j-slf4j-impl</artifactId>
 			<scope>test</scope>
 		</dependency>
-		
+
+		<!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-api -->
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-engine</artifactId>
+			<scope>test</scope>
+		</dependency>
+
 	</dependencies>
 
 	<build>
