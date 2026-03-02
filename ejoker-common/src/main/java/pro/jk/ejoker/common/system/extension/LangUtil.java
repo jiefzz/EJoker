@@ -3,7 +3,7 @@ package pro.jk.ejoker.common.system.extension;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
-import co.paralleluniverse.fibers.Suspendable;
+import pro.jk.ejoker.common.legacy.Suspendable;
 
 /**
  * 不像Netty中直接为Future接口加入一系列异步协调的方法（其中就包含await），<br />

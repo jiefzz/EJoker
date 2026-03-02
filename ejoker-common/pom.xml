@@ -8,7 +8,7 @@
 		<groupId>com.github.kimffy24</groupId>
 		<artifactId>ejoker</artifactId>
 		<version>3.0.7.1</version>
-		<relativePath />
+		<relativePath>../pom.xml</relativePath>
 	</parent>
 	<artifactId>ejoker-common</artifactId>
 
@@ -82,8 +82,8 @@
 				<artifactId>maven-compiler-plugin</artifactId>
 				<version>${version.plugin.maven-compiler-plugin}</version>
 				<configuration>
-					<source>${version.jdk}</source>
-					<target>${version.jdk}</target>
+					<source>21</source>
+					<target>21</target>
 					<encoding>UTF-8</encoding>
 				</configuration>
 			</plugin>

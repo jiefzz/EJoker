@@ -70,14 +70,7 @@ public class EJokerBootstrap {
 	protected final Map<String, Object> cTables2 = new ConcurrentHashMap<>();
 	
 	public EJokerBootstrap(String... packages) {
-		this(() -> {
-			// 通过环境变量选择启动的具体入口类
-			String flag = System.getProperty("pro.jk.ejoker.bootstrap.useQuasar");
-			if("1".equals(flag) || "true".equals(flag))
-				return pro.jk.ejoker_support.equasar.EJoker.class;
-			else
-				return EJoker.class;
-		}, packages);
+		this(() -> EJoker.class, packages);
 	}
 	
 	protected EJokerBootstrap(IFunction<Class<? extends EJoker>> eJokerTypeProvider, String... packages) {
@@ -90,9 +83,9 @@ public class EJokerBootstrap {
 		{
 			IEjokerContextDev2 eJokerFullContext = (IEjokerContextDev2 )eJokerContext;
 			// 扫描ejoker的默认的实现 : rpc
-			((EjokerContextDev2Impl )eJokerFullContext).getEJokerRootDefinationStore().scanPackage("pro.jk.ejoker_suppot.rpc.netty");
+			((EjokerContextDev2Impl )eJokerFullContext).getEJokerRootDefinitionStore().scanPackage("pro.jk.ejoker_suppot.rpc.netty");
 			// 外部参数传入的包
-			EachUtilx.forEach(packages, ((EjokerContextDev2Impl )eJokerFullContext).getEJokerRootDefinationStore()::scanPackage);
+			EachUtilx.loop(packages, ((EjokerContextDev2Impl) eJokerFullContext).getEJokerRootDefinitionStore()::scanPackage);
 			eJokerFullContext.refresh();
 		}
 	}

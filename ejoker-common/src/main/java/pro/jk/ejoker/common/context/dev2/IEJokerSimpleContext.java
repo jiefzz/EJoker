@@ -4,6 +4,10 @@ import java.lang.reflect.Type;
 
 import pro.jk.ejoker.common.utils.genericity.TypeRefer;
 
+/**
+ * 之格式基础的IoC的约定接口，街从IoC容器直接获取托管的服务实例
+ * <br /> 并且我们这里支持按泛型获取
+ */
 public interface IEJokerSimpleContext {
 
 	/**
@@ -29,7 +33,6 @@ public interface IEJokerSimpleContext {
 	 * * 按全限定签名取出指向的注册实例 or 抛出异常
 	 * @param clazz
 	 * @param types
-	 * @param pSign 泛型签名
 	 * @return
 	 */
 	public <T> T get(Class<T> clazz, Type... types);

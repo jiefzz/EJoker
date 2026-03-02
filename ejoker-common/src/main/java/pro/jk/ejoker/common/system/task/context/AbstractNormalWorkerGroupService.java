@@ -11,8 +11,6 @@ import pro.jk.ejoker.common.context.dev2.IEjokerContextDev2;
 import pro.jk.ejoker.common.system.functional.IFunction1;
 import pro.jk.ejoker.common.system.task.IAsyncEntrance;
 import pro.jk.ejoker.common.system.task.defaultProvider.SystemAsyncPool;
-import pro.jk.ejoker.common.system.wrapper.WrapperAssembler;
-import pro.jk.ejoker.common.system.wrapper.WrapperAssembler.AsyncEntranceProviderContext;
 
 public abstract class AbstractNormalWorkerGroupService {
 
@@ -25,16 +23,10 @@ public abstract class AbstractNormalWorkerGroupService {
 
 	@EInitialize(priority = 5)
 	private void init() {
-
-		if (hasRedefined.compareAndSet(false, true)) {
-			AsyncEntranceProvider = AbstractNormalWorkerGroupService::getDefaultThreadPool;
-		}
-
-		asyncPool = AsyncEntranceProvider.trigger(this);
+		asyncPool = getDefaultThreadPool(this);
 		ejokerContext.destroyRegister(asyncPool::shutdown, 95);
 		logger.debug("Create a new AsyncEntrance. [asyncEntranceType: {}, requireClass: {}]", asyncPool.getClass().getName(),
 				this.getClass().getName());
-
 	}
 
 	protected abstract int usePoolSize();
@@ -45,20 +37,4 @@ public abstract class AbstractNormalWorkerGroupService {
 		return new SystemAsyncPool(service.usePoolSize(), service.prestartAll());
 	}
 
-	private static AtomicBoolean hasRedefined = new AtomicBoolean(false);
-
-	private static IFunction1<IAsyncEntrance, AbstractNormalWorkerGroupService> AsyncEntranceProvider = null;
-
-	static {
-		WrapperAssembler.setASyncEntranceProviderContext(new AsyncEntranceProviderContext() {
-			@Override
-			public boolean tryMarkHasBeenSet() {
-				return !hasRedefined.compareAndSet(false, true);
-			}
-			@Override
-			public void apply2asyncEntranceProvider(IFunction1<IAsyncEntrance, AbstractNormalWorkerGroupService> f) {
-				AbstractNormalWorkerGroupService.AsyncEntranceProvider = f;
-			}
-		});
-	}
 }

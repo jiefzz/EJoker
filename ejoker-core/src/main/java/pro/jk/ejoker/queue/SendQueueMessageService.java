@@ -19,7 +19,6 @@ import pro.jk.ejoker.common.context.annotation.context.EService;
 import pro.jk.ejoker.common.service.Scavenger;
 import pro.jk.ejoker.common.system.task.context.SystemAsyncHelper;
 import pro.jk.ejoker.common.system.task.io.IOExceptionOnRuntime;
-import pro.jk.ejoker.common.system.wrapper.MixedThreadPoolExecutor;
 import pro.jk.ejoker.queue.skeleton.aware.EJokerQueueMessage;
 import pro.jk.ejoker.queue.skeleton.aware.IProducerWrokerAware;
 
@@ -74,7 +73,7 @@ public class SendQueueMessageService {
 	@EInitialize
 	private void init() {
 		if(EJokerEnvironment.ASYNC_EJOKER_MESSAGE_SEND) {
-			threadPoolExecutor = new MixedThreadPoolExecutor(
+			threadPoolExecutor = new ThreadPoolExecutor(
 					EJokerEnvironment.ASYNC_EJOKER_MESSAGE_SENDER_THREADPOLL_SIZE,
 					EJokerEnvironment.ASYNC_EJOKER_MESSAGE_SENDER_THREADPOLL_SIZE,
 					0l,

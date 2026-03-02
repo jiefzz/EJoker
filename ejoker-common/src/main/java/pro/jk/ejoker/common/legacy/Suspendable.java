@@ -11,7 +11,7 @@
  * under the terms of the GNU Lesser General Public License version 3.0
  * as published by the Free Software Foundation.
  */
-package co.paralleluniverse.fibers;
+package pro.jk.ejoker.common.legacy;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -20,14 +20,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks a method as suspendable.
- * <p/>
- * Marking a method as suspendable by declaring {@code throws SuspendExecution} is the preferable way, but using this annotation might
- * become necessary if the method implements or overrides a method which is not declared to throw {@link SuspendExecution}. In that case
- * marking the method in its declaring class/interface as potentially suspendable is necessary, and can be done in an external text file.
- * Please refer to the user manual to see how this can be done automatically.
- *
- * @author pron
+ * 以前刚开始的时候用了quasar这个项目，这个就是通过quasar的fiber来实现async的异步线程的，所以很多类型中有这个注解在，
+ * <br />一下删除会影响非常多工程文件，暂时留着，但是为了避免以后受影响，同时会重命名
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)

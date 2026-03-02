@@ -1,13 +1,13 @@
 package pro.jk.ejoker.common.system.wrapper;
 
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
-import co.paralleluniverse.fibers.Suspendable;
-import pro.jk.ejoker.common.system.functional.IFunction;
-import pro.jk.ejoker.common.system.wrapper.WrapperAssembler.DiscardProviderContext;
-import pro.jk.ejoker.common.system.wrapper.WrapperAssembler._IVF2_TimeUnit_long;
+import pro.jk.ejoker.common.legacy.Suspendable;
 
+/**
+ * 這個是之前對quasar的調用的sleep的封裝，但是以後不需要了
+ * <br /> 工程中有啊較多使用這個的地方，這裡就保留為 TimeUnit#sleep 的委託調用算了；
+ */
 public class DiscardWrapper {
 	
 	/**
@@ -33,9 +33,9 @@ public class DiscardWrapper {
 	@Suspendable
 	public static void sleepInterruptable(TimeUnit unit, long millis) {
 		try {
-			sleep(unit, millis);
+			unit.sleep(millis);
 		} catch (InterruptedException e) {
-			interruptedAction.trigger(); // clean interrupt flag and do nothing
+			// do nothing
 		}
 	}
 
@@ -46,32 +46,7 @@ public class DiscardWrapper {
 
 	@Suspendable
 	public static void sleep(TimeUnit unit, long millis) throws InterruptedException {
-		vf2.trigger(unit, millis);
+		unit.sleep(millis);
 	}
-	
-	private static AtomicBoolean hasRedefined = new AtomicBoolean(false);
-	
-	private static _IVF2_TimeUnit_long vf2;
-	
-	private static IFunction<Boolean> interruptedAction;
-	
-	static {
-		vf2 = (u, l) -> Thread.sleep(u.toMillis(l));;
-		interruptedAction = Thread::interrupted;
-		
-		WrapperAssembler.setDiscardProviderContext(new DiscardProviderContext() {
-			@Override
-			public boolean tryMarkHasBeenSet() {
-				return !hasRedefined.compareAndSet(false, true);
-			}
-			@Override
-			public void apply2interrupted(IFunction<Boolean> interruptedAction) {
-				DiscardWrapper.interruptedAction = interruptedAction;
-			}
-			@Override
-			public void apply2discard(_IVF2_TimeUnit_long vf2) {
-				DiscardWrapper.vf2 = vf2;
-			}
-		});
-	}
+
 }

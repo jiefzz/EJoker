@@ -25,10 +25,18 @@ import pro.jk.ejoker.common.utils.genericity.GenericDefinedField;
 import pro.jk.ejoker.common.utils.genericity.GenericExpression;
 import pro.jk.ejoker.common.utils.genericity.GenericExpressionFactory;
 
-public class EjokerRootDefinationStore implements IEJokerClazzScanner{
+/**
+ * 扫描器构建的元数据存储中西，供IoC初始化和后续的handler/event的路由逻辑展开时使用
+ * <br /> 作为一个简单实现，我们这里并没有考虑到类加载器的分层问题，（如果要实现类似spark的那种非常牛逼哄哄的分层累加在，我怕是真有心无力啊）
+ * <br /> 所以有分层 ClassLoader 需求的情况，不适用
+ */
+public class EjokerRootDefinitionStore implements IEJokerClazzScanner {
 	
-	private final static Logger logger = LoggerFactory.getLogger(EjokerRootDefinationStore.class);
-	
+	private final static Logger logger = LoggerFactory.getLogger(EjokerRootDefinitionStore.class);
+
+	/**
+	 * 默认的扫描包，主要是当前的ejoker框架必须要加载
+	 */
 	public static final String SELF_PACKAGE_NAME = "pro.jk.ejoker";
 
 	/**

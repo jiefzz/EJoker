@@ -1,11 +1,6 @@
 package pro.jk.ejoker.common.system.task.defaultProvider;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
@@ -32,6 +27,7 @@ public class SystemAsyncPool implements IAsyncEntrance {
 	}
 
 	public SystemAsyncPool(int threadPoolSize, boolean prestartAllThread) {
+		/*
 		ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(
 				threadPoolSize,
 				threadPoolSize,
@@ -60,12 +56,18 @@ public class SystemAsyncPool implements IAsyncEntrance {
 		if (prestartAllThread)
 			threadPoolExecutor.prestartAllCoreThreads();
 		defaultThreadPool = threadPoolExecutor;
+		*/
 
+		// 使用虛線程
+		defaultThreadPool = Executors.newVirtualThreadPerTaskExecutor();
 	}
 
 	@Override
 	public <TAsyncTaskResult> Future<TAsyncTaskResult> execute(IFunction<TAsyncTaskResult> asyncTaskThread,
 			boolean reuse) {
+		// reuse是沒有虛線程時，讓等待的線程直接來領取一個新任務去執行的做法，但是有共用調用棧的情況，其實不保險的，
+		// 主要是減少線程重複創建的情況
+		/* 當使用虛線程時，這個reuse的邏輯就不再需要了。
 		if (
 				reuse
 				&& Thread.currentThread().getName().startsWith(SystemAsyncPool.threadNamePrefix)
@@ -80,6 +82,7 @@ public class SystemAsyncPool implements IAsyncEntrance {
 			}
 			return future;
 		}
+		*/
 
 		// @important 建立新线程存在线程上限和大量的上下文切换成本，极易发生OutOfMemory。
 		// @important 或者使用cachedThreadPool？？

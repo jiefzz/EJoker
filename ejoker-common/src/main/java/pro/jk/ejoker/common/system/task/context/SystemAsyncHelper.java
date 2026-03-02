@@ -1,5 +1,6 @@
 package pro.jk.ejoker.common.system.task.context;
 
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import pro.jk.ejoker.common.context.annotation.context.EService;
@@ -18,6 +19,10 @@ import pro.jk.ejoker.common.system.functional.IVoidFunction;
 @EService
 public class SystemAsyncHelper extends AbstractNormalWorkerGroupService {
 
+	// SystemAsyncHelper 是向外提供的入口，主要是暴露submit方法
+	// AbstractNormalWorkerGroupService和SystemAsyncPool 本來是為了橋接本地線程池或quasar線程池的
+	// 升級jdk21后不再需要，SystemAsyncPool的底層submit直接提交虛線程了。
+	// prestartAll poolSize reuse這些邏輯將都會失效
 	private static int defaultPoolSize = ControlTable.detectAsInteger(ConfigKeyPrimary.EJOKER_ASYNC_EXECUTOR_POOL_SIZE);
 	
 	public static void setDefaultPoolSize(int poolSize) {

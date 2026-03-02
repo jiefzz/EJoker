@@ -11,7 +11,7 @@ import java.util.concurrent.Future;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import co.paralleluniverse.fibers.Suspendable;
+import pro.jk.ejoker.common.legacy.Suspendable;
 import pro.jk.ejoker.commanding.AbstractCommandHandler;
 import pro.jk.ejoker.commanding.CommandRuntimeException;
 import pro.jk.ejoker.commanding.ICommand;

@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import co.paralleluniverse.fibers.Suspendable;
+import pro.jk.ejoker.common.legacy.Suspendable;
 import pro.jk.ejoker.common.context.annotation.context.EService;
 import pro.jk.ejoker.common.system.enhance.StringUtilx;
 import pro.jk.ejoker.common.system.extension.AsyncWrapperException;
@@ -21,11 +21,10 @@ import pro.jk.ejoker.common.system.functional.IVoidFunction1;
 import pro.jk.ejoker.common.system.functional.IVoidFunction2;
 import pro.jk.ejoker.common.system.functional.IVoidFunction3;
 import pro.jk.ejoker.common.system.helper.Ensure;
-import pro.jk.ejoker.common.system.wrapper.DiscardWrapper;
 
 /**
  * 模拟IOHelper的实现
- * {@link https://github.com/tangxuehua/ecommon/blob/master/src/ECommon/IO/IOHelper.cs}
+ * <br /> <a href="https://github.com/tangxuehua/ecommon/blob/master/src/ECommon/IO/IOHelper.cs">參考</a>
  * 
  * @author JiefzzLon
  *
@@ -551,7 +550,14 @@ public class IOHelper {
 		externalContext.currentRetryTimes++;
 		try {
 			if (externalContext.currentRetryTimes >= externalContext.maxRetryTimes) {
+				/*
 				DiscardWrapper.sleepInterruptable(TimeUnit.MILLISECONDS, externalContext.retryInterval);
+				 */
+                try {
+                    TimeUnit.MILLISECONDS.sleep(externalContext.retryInterval);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
 //				retryExecutorService.submit(() -> {
 //					DiscardWrapper.sleep(TimeUnit.MILLISECONDS, externalContext.retryInterval);
 //					externalContext.loopAction.trigger(externalContext);

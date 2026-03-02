@@ -8,7 +8,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import co.paralleluniverse.fibers.Suspendable;
+import pro.jk.ejoker.common.legacy.Suspendable;
 import pro.jk.ejoker.common.system.enhance.StringUtilx;
 import pro.jk.ejoker.common.system.extension.AsyncWrapperException;
 import pro.jk.ejoker.domain.AbstractAggregateRoot;

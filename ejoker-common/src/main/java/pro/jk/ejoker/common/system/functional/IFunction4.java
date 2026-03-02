@@ -1,6 +1,6 @@
 package pro.jk.ejoker.common.system.functional;
 
-import co.paralleluniverse.fibers.Suspendable;
+import pro.jk.ejoker.common.legacy.Suspendable;
 
 @FunctionalInterface
 public interface IFunction4<TResult, TP1, TP2, TP3, TP4> {
