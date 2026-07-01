@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import co.paralleluniverse.fibers.Suspendable;
+//import co.paralleluniverse.fibers.Suspendable;
 import pro.jk.ejoker.common.context.dev2.IEjokerContextDev2;
 import pro.jk.ejoker.common.system.enhance.EachUtilx;
 import pro.jk.ejoker.common.system.enhance.MapUtilx;
@@ -373,7 +373,7 @@ public class MessageHandlerPool {
 			return realHandler;
 		}
 
-		@Suspendable
+//		@Suspendable
 		@Override
 		public Future<Void> handleAsync(IMessage... messages) {
 			try {

@@ -9,6 +9,7 @@
 		<groupId>com.github.kimffy24</groupId>
 		<artifactId>ejoker-support</artifactId>
 		<version>3.0.7.1</version>
+		<relativePath>../pom.xml</relativePath>
 	</parent>
 	<artifactId>ejoker-support-mq-rocket-pull</artifactId>
 	

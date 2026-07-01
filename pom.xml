@@ -60,6 +60,7 @@
 
 		<version.smartjson>2.4.9</version.smartjson>
 		<version.netty.all>4.1.42.Final</version.netty.all>
+		<version.guava>26.0-jre</version.guava>
 	</properties>
 
 	<dependencies>
@@ -122,6 +123,12 @@
 				<version>4.4.0</version>
 			</dependency>
 
+			<dependency>
+				<groupId>com.google.guava</groupId>
+				<artifactId>guava</artifactId>
+				<!-- 请使用最新的稳定版本，也可以保持与你项目其他依赖兼容的版本 -->
+				<version>${version.guava}</version>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
 

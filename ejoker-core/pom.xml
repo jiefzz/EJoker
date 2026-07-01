@@ -7,6 +7,7 @@
 		<groupId>com.github.kimffy24</groupId>
 		<artifactId>ejoker</artifactId>
 		<version>3.0.7.1</version>
+		<relativePath>../pom.xml</relativePath>
 	</parent>
 	<artifactId>ejoker-core</artifactId>
 	<packaging>jar</packaging>
@@ -17,6 +18,12 @@
 			<groupId>com.github.kimffy24</groupId>
 			<artifactId>ejoker-common</artifactId>
 			<version>3.0.7.1</version>
+		</dependency>
+
+
+		<dependency>
+			<groupId>com.google.guava</groupId>
+			<artifactId>guava</artifactId>
 		</dependency>
 
 	</dependencies>
