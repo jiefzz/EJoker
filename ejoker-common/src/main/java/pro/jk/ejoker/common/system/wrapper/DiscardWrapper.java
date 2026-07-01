@@ -3,7 +3,7 @@ package pro.jk.ejoker.common.system.wrapper;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import co.paralleluniverse.fibers.Suspendable;
+//import co.paralleluniverse.fibers.Suspendable;
 import pro.jk.ejoker.common.system.functional.IFunction;
 import pro.jk.ejoker.common.system.wrapper.WrapperAssembler.DiscardProviderContext;
 import pro.jk.ejoker.common.system.wrapper.WrapperAssembler._IVF2_TimeUnit_long;
@@ -17,7 +17,7 @@ public class DiscardWrapper {
 	 * 
 	 * @param millis
 	 */
-	@Suspendable
+//	@Suspendable
 	public static void sleepInterruptable(long millis) {
 		sleepInterruptable(TimeUnit.MILLISECONDS, millis);
 	}
@@ -30,7 +30,7 @@ public class DiscardWrapper {
 	 * @param unit
 	 * @param millis
 	 */
-	@Suspendable
+//	@Suspendable
 	public static void sleepInterruptable(TimeUnit unit, long millis) {
 		try {
 			sleep(unit, millis);
@@ -39,12 +39,12 @@ public class DiscardWrapper {
 		}
 	}
 
-	@Suspendable
+//	@Suspendable
 	public static void sleep(long millis) throws InterruptedException {
 		sleep(TimeUnit.MILLISECONDS, millis);
 	}
 
-	@Suspendable
+//	@Suspendable
 	public static void sleep(TimeUnit unit, long millis) throws InterruptedException {
 		vf2.trigger(unit, millis);
 	}

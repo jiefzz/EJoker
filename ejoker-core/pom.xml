@@ -19,12 +19,6 @@
 			<version>3.0.7.1</version>
 		</dependency>
 
-		<dependency>
-			<groupId>co.paralleluniverse</groupId>
-			<artifactId>quasar-core</artifactId>
-			<classifier>jdk8</classifier>
-		</dependency>
-
 	</dependencies>
 
 	<build>
@@ -78,47 +72,6 @@
 					<target>${version.jdk}</target>
 					<encoding>UTF-8</encoding>
 				</configuration>
-			</plugin>
-
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-antrun-plugin</artifactId>
-				<executions>
-					<execution>
-						<id>instrument-classes</id>
-						<!-- phase>compile</phase -->
-						<configuration>
-							<tasks>
-								<property name="ant_classpath"
-									refid="maven.dependency.classpath" />
-								<taskdef name="scanSuspendables"
-									classname="co.paralleluniverse.fibers.instrument.SuspendablesScanner"
-									classpath="${ant_classpath}" />
-								<scanSuspendables auto="true" append="true"
-									supersFile="${project.build.directory}/classes/META-INF/suspendable-supers"
-									suspendablesFile="${project.build.directory}/classes/META-INF/suspendables">
-									<fileset dir="${project.build.directory}/classes/"
-										includes="**/*.class" />
-									<fileset dir="${basedir}/../ejoker-common/target/classes/"
-										includes="**/*.class" />
-								</scanSuspendables>
-								<!-- uncomment it to make AOT instrument work -->
-								<!-- <taskdef name="instrumentationTask"
-									classname="co.paralleluniverse.fibers.instrument.InstrumentationTask"
-									classpath="${ant_classpath}" />
-								<delete file="${basedir}/../ejoker-common/target/classes/co" />
-								<instrumentationTask verbose="true"
-									check="true" debug="true">
-									<fileset dir="${project.build.directory}/classes/"
-										includes="**/*.class" />
-								</instrumentationTask> -->
-							</tasks>
-						</configuration>
-						<goals>
-							<goal>run</goal>
-						</goals>
-					</execution>
-				</executions>
 			</plugin>
 
 		</plugins>

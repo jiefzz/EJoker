@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import co.paralleluniverse.fibers.Suspendable;
+//import co.paralleluniverse.fibers.Suspendable;
 import pro.jk.ejoker.common.context.annotation.context.EService;
 import pro.jk.ejoker.common.system.enhance.StringUtilx;
 import pro.jk.ejoker.common.system.extension.AsyncWrapperException;
@@ -442,7 +442,7 @@ public class IOHelper {
 	 * 如果自己实现loopAction的话请务必在自定义的loopAction中执行当前调用
 	 * @param externalContext
 	 */
-	@Suspendable
+//	@Suspendable
 	public <T> void taskContinueAction(IOHelperContext<T> externalContext) {
 		
 		Future<T> task = null;

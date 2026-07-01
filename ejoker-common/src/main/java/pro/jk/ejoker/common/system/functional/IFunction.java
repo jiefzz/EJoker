@@ -1,11 +1,11 @@
 package pro.jk.ejoker.common.system.functional;
 
-import co.paralleluniverse.fibers.Suspendable;
+//import co.paralleluniverse.fibers.Suspendable;
 
 @FunctionalInterface
 public interface IFunction<TResult> {
 
-	@Suspendable
+//	@Suspendable
 	public TResult trigger();
 	
 }

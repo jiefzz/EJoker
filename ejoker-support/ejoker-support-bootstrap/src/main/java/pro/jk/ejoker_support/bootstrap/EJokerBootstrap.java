@@ -72,10 +72,10 @@ public class EJokerBootstrap {
 	public EJokerBootstrap(String... packages) {
 		this(() -> {
 			// 通过环境变量选择启动的具体入口类
-			String flag = System.getProperty("pro.jk.ejoker.bootstrap.useQuasar");
-			if("1".equals(flag) || "true".equals(flag))
-				return pro.jk.ejoker_support.equasar.EJoker.class;
-			else
+//			String flag = System.getProperty("pro.jk.ejoker.bootstrap.useQuasar");
+//			if("1".equals(flag) || "true".equals(flag))
+//				return pro.jk.ejoker_support.equasar.EJoker.class;
+//			else
 				return EJoker.class;
 		}, packages);
 	}
