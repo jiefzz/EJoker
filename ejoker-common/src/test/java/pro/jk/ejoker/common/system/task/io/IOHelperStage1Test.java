@@ -151,4 +151,22 @@ public class IOHelperStage1Test {
 
 		assertEquals(1, mainActionInvocations.get(), "completeAction 失败后绝不能重放已经成功的 mainAction");
 	}
+
+	@Test
+	public void testLegacyPublicConstructorsRemainCompatible() {
+		IOHelper.IOHelperContext<Void> context = new IOHelper.IOHelperContext<>(
+				"LegacyConstructor",
+				successfulAction(new AtomicInteger(0)),
+				c -> { },
+				r -> { },
+				NO_CONTEXT,
+				(c, e, msg) -> { },
+				true,
+				4,
+				250L
+				);
+
+		assertEquals(4, context.retryPolicy.getMaxAttempts(), "旧 public 构造器应保留并映射到 maxAttempts");
+		assertEquals(250L, context.retryPolicy.getBaseDelayMillis(), "旧 public 构造器应保留并映射到 baseDelayMillis");
+	}
 }

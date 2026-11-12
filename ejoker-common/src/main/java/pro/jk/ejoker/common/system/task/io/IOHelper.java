@@ -703,6 +703,42 @@ public class IOHelper {
 			this.retryPolicy = retryPolicy;
 		}
 
+		@Deprecated
+		public IOHelperContext(
+				String actionName,
+				IFunction<Future<T>> mainAction,
+				IVoidFunction1<IOHelperContext<T>> loopAction,
+				IVoidFunction1<T> completeAction,
+				IFunction<String> contextInfo,
+				IVoidFunction3<IOHelperContext<T>, Exception, String> faildAction,
+				boolean retryWhenFailed,
+				int maxRetryTimes,
+				long retryInterval) {
+			this(
+					actionName,
+					mainAction,
+					loopAction,
+					completeAction,
+					contextInfo,
+					faildAction,
+					retryWhenFailed,
+					new RetryPolicy(maxRetryTimes, retryInterval, retryInterval, false, null, null));
+		}
+
+		@Deprecated
+		public IOHelperContext(
+				String actionName,
+				IFunction<Future<T>> mainAction,
+				IVoidFunction1<IOHelperContext<T>> loopAction,
+				IVoidFunction1<T> completeAction,
+				IFunction<String> contextInfo,
+				IVoidFunction3<IOHelperContext<T>, Exception, String> faildAction,
+				boolean retryWhenFailed,
+				int maxRetryTimes) {
+			this(actionName, mainAction, loopAction, completeAction, contextInfo, faildAction,
+					retryWhenFailed, maxRetryTimes, 1000L);
+		}
+
 		public IOHelperContext(
 				String actionName,
 				IFunction<Future<T>> mainAction,
