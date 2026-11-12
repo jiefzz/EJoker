@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import pro.jk.ejoker.common.context.annotation.context.Dependence;
 import pro.jk.ejoker.common.service.IJSONStringConverterPro;
@@ -15,7 +16,6 @@ import pro.jk.ejoker.common.system.enhance.EachUtilx;
 import pro.jk.ejoker.common.system.enhance.MapUtilx;
 import pro.jk.ejoker.common.system.extension.acrossSupport.EJokerFutureUtil;
 import pro.jk.ejoker.common.system.task.context.SystemAsyncHelper;
-import pro.jk.ejoker.common.system.wrapper.LockWrapper;
 import pro.jk.ejoker.eventing.DomainEventStream;
 import pro.jk.ejoker.eventing.EventAppendResult;
 import pro.jk.ejoker.eventing.IEventSerializer;
@@ -155,7 +155,7 @@ public class InMemoryEventStore implements IEventStore {
 
     public final static class AggregateInfo {
 
-    	public Lock writeLock = LockWrapper.createLock();
+    	public Lock writeLock = new ReentrantLock();
     	
         public long currentVersion;
         

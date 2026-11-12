@@ -4,7 +4,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
-import pro.jk.ejoker.common.context.dev2.EjokerRootDefinationStore;
+import pro.jk.ejoker.common.context.dev2.EjokerRootDefinitionStore;
 import pro.jk.ejoker.common.context.dev2.IEJokerSimpleContext;
 import pro.jk.ejoker.common.context.dev2.IEjokerContextDev2;
 import pro.jk.ejoker.common.context.dev2.impl.EjokerContextDev2Impl;
@@ -50,7 +50,7 @@ public class EJoker {
 		((EjokerContextDev2Impl )context).shallowRegister(messageHandlerPool);
 		
 		// regist scanner hook
-		((EjokerContextDev2Impl )context).getEJokerRootDefinationStore().registeScannerHook(clazz -> {
+		((EjokerContextDev2Impl )context).getEJokerRootDefinitionStore().registeScannerHook(clazz -> {
 				RegistCommandHandlerHelper.checkAndRegistCommandAsyncHandler(clazz, commandAsyncHandlerPool, context);
 				RegistMessageHandlerHelper.checkAndRegistMessageHandler(clazz, messageHandlerPool, context);
 				RegistDomainEventHandlerHelper.checkAndRegistDomainEventHandler(clazz);
@@ -64,13 +64,13 @@ public class EJoker {
 					DomainExceptionCodecHelper.getReflectFields((Class<IDomainException> )clazz);
 		});
 		
-		((EjokerContextDev2Impl )context).getEJokerRootDefinationStore().scanPackage(SELF_PACKAGE_NAME);
+		((EjokerContextDev2Impl )context).getEJokerRootDefinitionStore().scanPackage(SELF_PACKAGE_NAME);
 		
 	}
 	
 	static {
 		
-		SELF_PACKAGE_NAME = EjokerRootDefinationStore.SELF_PACKAGE_NAME;
+		SELF_PACKAGE_NAME = EjokerRootDefinitionStore.SELF_PACKAGE_NAME;
 		
 		SystemAsyncHelper.setDefaultPoolSize(EJokerEnvironment.ASYNC_INTERNAL_EXECUTE_THREADPOOL_SIZE);
 		
@@ -100,7 +100,7 @@ public class EJoker {
 					throw new RuntimeException(e);
 				}
 			}
-			
+
 			try {
 				Constructor<? extends EJoker> constructor = prototype.getDeclaredConstructor();
 				constructor.setAccessible(true);

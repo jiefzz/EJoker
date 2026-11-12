@@ -17,3 +17,7 @@ package pro.jk.ejoker.common.system.wrapper;
  * 自己mark一下
  *
  */
+
+/**
+ * 升級jdk21后，這個包的類更多的是為遺留未修改的調用橋接到juc的調用上，後續不要再用了，直接上juc即可
+ */

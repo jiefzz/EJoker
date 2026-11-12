@@ -22,9 +22,8 @@ import pro.jk.ejoker.common.context.ContextRuntimeException;
 import pro.jk.ejoker.common.context.annotation.context.Dependence;
 import pro.jk.ejoker.common.context.annotation.context.EInitialize;
 import pro.jk.ejoker.common.context.dev2.EJokerInstanceBuilder;
-import pro.jk.ejoker.common.context.dev2.EjokerRootDefinationStore;
+import pro.jk.ejoker.common.context.dev2.EjokerRootDefinitionStore;
 import pro.jk.ejoker.common.context.dev2.IEJokerSimpleContext;
-import pro.jk.ejoker.common.context.dev2.IEjokerClazzScannerHook;
 import pro.jk.ejoker.common.context.dev2.IEjokerContextDev2;
 import pro.jk.ejoker.common.system.enhance.EachUtilx;
 import pro.jk.ejoker.common.system.enhance.MapUtilx;
@@ -45,7 +44,7 @@ public class EjokerContextDev2Impl implements IEjokerContextDev2 {
 	
 	private final static Class<?> ConflictTypeRecord = Object.class;
 	
-	private final EjokerRootDefinationStore defaultRootDefinationStore = new EjokerRootDefinationStore();
+	private final EjokerRootDefinitionStore defaultRootDefinitionStore = new EjokerRootDefinitionStore();
 	
 	/**
 	 * 已加载的标记集合
@@ -102,7 +101,11 @@ public class EjokerContextDev2Impl implements IEjokerContextDev2 {
 	 * * 针对EService是泛型 value为对应的类/接口名（带包路径的全名）
 	 */
 	private final Set<String> instanceCandidateDisable = new HashSet<>();
-	
+
+	/**
+	 * 这个treeMap的排序，决定了由小到大遍历
+	 * <br /> {@link EInitialize}
+	 */
 	Map<Integer, Queue<IVoidFunction>> initTasks = new TreeMap<>((o1, o2) -> o1.compareTo(o2));
 	
 	Map<Integer, Queue<IVoidFunction>> destroyTasks = new TreeMap<>((o1, o2) -> o1.compareTo(o2));
@@ -168,8 +171,8 @@ public class EjokerContextDev2Impl implements IEjokerContextDev2 {
 		instanceMap.put(instanceTypeName, instance);
 	}
 
-	public EjokerRootDefinationStore getEJokerRootDefinationStore() {
-		return defaultRootDefinationStore;
+	public EjokerRootDefinitionStore getEJokerRootDefinitionStore() {
+		return defaultRootDefinitionStore;
 	}
 
 	@Override
@@ -239,7 +242,7 @@ public class EjokerContextDev2Impl implements IEjokerContextDev2 {
 	
 	private void refreshContextRecord() {
 		
-		defaultRootDefinationStore.forEachEServiceExpressions((clazz, genericExpression) -> {
+		defaultRootDefinitionStore.forEachEServiceExpressions((clazz, genericExpression) -> {
 			
 			Set<Class<?>> currentRecord = new HashSet<>();
 			String originalExpressSignature = genericExpression.expressSignature;
@@ -403,7 +406,7 @@ public class EjokerContextDev2Impl implements IEjokerContextDev2 {
 			
 		});
 		
-		defaultRootDefinationStore.forEachEServiceExpressions((clazz, genericExpression) -> {
+		defaultRootDefinitionStore.forEachEServiceExpressions((clazz, genericExpression) -> {
 			/// 预加载
 			if(!genericExpression.isComplete()) {
 				// throw new RuntimeException(String.format("Expect handle a complete state expression, but not!!! [ class: %s ]", clazz.getName()));
@@ -413,7 +416,7 @@ public class EjokerContextDev2Impl implements IEjokerContextDev2 {
 			Object instance = instanceMap.get(clazz.getName());
 			
 			EachUtilx.forEach(
-					defaultRootDefinationStore.getEDependenceRecord(clazz),
+					defaultRootDefinitionStore.getEDependenceRecord(clazz),
 					(fieldName, genericDefinedField) -> injectDependence(
 							fieldName,
 							genericDefinedField,
@@ -477,7 +480,7 @@ public class EjokerContextDev2Impl implements IEjokerContextDev2 {
 					
 					// 对新创建的EService对象注入依赖
 					EachUtilx.forEach(
-							defaultRootDefinationStore.getEDependenceRecord(eServiceClazz),
+							defaultRootDefinitionStore.getEDependenceRecord(eServiceClazz),
 							(fieldName, genericDefinedField) -> injectDependence(
 									fieldName,
 									genericDefinedField,
@@ -596,7 +599,7 @@ public class EjokerContextDev2Impl implements IEjokerContextDev2 {
 	private void enqueueInitMethod(Object instance) {
 		final Class<?> instanceClazz = instance.getClass();
 		EachUtilx.forEach(
-				defaultRootDefinationStore.getEInitializeRecord(instanceClazz),
+				defaultRootDefinitionStore.getEInitializeRecord(instanceClazz),
 				(methodName, method) -> {
 					EInitialize annotation = method.getAnnotation(EInitialize.class);
 					int priority = annotation.priority();

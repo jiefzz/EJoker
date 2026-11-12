@@ -1,12 +1,12 @@
 package pro.jk.ejoker.common.framework.enhance;
 
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import pro.jk.ejoker.common.system.wrapper.RWLockWrapper;
 
 public abstract class EasyCleanMailbox {
 
-	private final ReadWriteLock rwLock = RWLockWrapper.createRWLock();
+	private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 	
 	/**
 	 * 包装读锁为使用锁

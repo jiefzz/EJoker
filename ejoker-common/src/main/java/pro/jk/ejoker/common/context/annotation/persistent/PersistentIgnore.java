@@ -11,11 +11,10 @@ import pro.jk.ejoker.common.context.annotation.EJokerAnnotation;
 /**
  * While doing persistent job, we except to ignore some field!
  * @author JiefzzLon
- *
+ * <br /> 序列化的时候，忽略这个注解标记的字段
  */
 @Target({ ElementType.FIELD })
 @Retention(RetentionPolicy.RUNTIME)
-@Inherited
 @EJokerAnnotation
 public @interface PersistentIgnore {
 

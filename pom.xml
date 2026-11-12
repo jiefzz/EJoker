@@ -52,7 +52,7 @@
 
 		<version.plugin.maven-compiler-plugin>3.8.1</version.plugin.maven-compiler-plugin>
 
-		<version.jdk>1.8</version.jdk>
+		<version.jdk>21</version.jdk>
 		<version.junit.jupiter>5.5.2</version.junit.jupiter>
 		<version.slf4j>1.7.25</version.slf4j>
 		<version.slf4j_log4j>2.17.1</version.slf4j_log4j>
@@ -101,6 +101,11 @@
 				<version>${version.commons_lang3}</version>
 			</dependency>
 
+			<dependency>
+				<groupId>com.google.guava</groupId>
+				<artifactId>guava</artifactId>
+				<version>${version.guava}</version> <!-- 建议使用最新稳定版 -->
+			</dependency>
 
 			<!-- 号称最快的json包 -->
 			<dependency>
@@ -121,13 +126,6 @@
 				<groupId>org.apache.rocketmq</groupId>
 				<artifactId>rocketmq-client</artifactId>
 				<version>4.4.0</version>
-			</dependency>
-
-			<dependency>
-				<groupId>com.google.guava</groupId>
-				<artifactId>guava</artifactId>
-				<!-- 请使用最新的稳定版本，也可以保持与你项目其他依赖兼容的版本 -->
-				<version>${version.guava}</version>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
@@ -162,6 +160,7 @@
 							<skipTests>true</skipTests>
 						</configuration>
 					</plugin>
+
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-deploy-plugin</artifactId>
@@ -176,6 +175,7 @@
 							</execution>
 						</executions>
 					</plugin>
+
 					<!-- Source -->
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
@@ -195,7 +195,7 @@
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-javadoc-plugin</artifactId>
-						<version>2.9.1</version>
+						<version>3.6.3</version>
 						<configuration>
 							<aggregate>true</aggregate>
 							<nohelp>true</nohelp>

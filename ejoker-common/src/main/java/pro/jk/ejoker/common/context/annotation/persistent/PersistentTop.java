@@ -10,7 +10,7 @@ import pro.jk.ejoker.common.context.annotation.EJokerAnnotation;
 /**
  * While doing persistent job, we do not find any properties from it's father.
  * @author JiefzzLon
- *
+ * <br /> 这个注解标记一个对象的是序列化的顶部，不再往上递归
  */
 @Target({ ElementType.TYPE })
 @Retention(RetentionPolicy.RUNTIME)

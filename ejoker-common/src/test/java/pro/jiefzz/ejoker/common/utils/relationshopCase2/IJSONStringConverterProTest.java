@@ -10,8 +10,8 @@ public class IJSONStringConverterProTest {
 	@Test
 	public void test1() {
 		EjokerContextDev2Impl eJokerContext = new EjokerContextDev2Impl();
-		eJokerContext.getEJokerRootDefinationStore().scanPackage("pro.jk.ejoker");
-		eJokerContext.getEJokerRootDefinationStore().scanPackage("pro.jiefzz.ejoker.common.utils.relationshopCase2");
+		eJokerContext.getEJokerRootDefinitionStore().scanPackage("pro.jk.ejoker");
+		eJokerContext.getEJokerRootDefinitionStore().scanPackage("pro.jiefzz.ejoker.common.utils.relationshopCase2");
 		eJokerContext.refresh();
 
 		StandardConverter x = new StandardConverter();

@@ -9,6 +9,7 @@ import pro.jk.ejoker.common.context.annotation.EJokerAnnotation;
 
 /**
  * Tell the configureObject or contextObject to scan its handler method!!!
+ * <br /> 标记一个聚合根
  * @author JiefzzLon
  *
  */
