@@ -471,9 +471,15 @@ public class IOHelper {
 				return;
 			}
 
-			externalContext.completeAction.trigger(result);
+			// @stage0-fix: 先终结循环，再执行完成回调。
+			// 修复前的顺序是 completeAction.trigger() 在前、markFinish() 在后。一旦 completeAction
+			// 抛异常，异常会被下方 catch(RuntimeException) 吞掉（仅记日志），finishFlag 仍为 false，
+			// 外层 tryAsyncAction2 的 do/while(!isFinish()) 便会重新执行整个 mainAction ——
+			// 即把【已经成功落库】的事件/消息再提交一遍。
+			// IO 既已成功，回调失败绝不能反过来触发 IO 重放，故 markFinish 必须提前。
 			externalContext.markFinish();
-			
+			externalContext.completeAction.trigger(result);
+
 //			if (result == null) {
 //				logger.error("Async task result is `null`!!! [taskName: {}, contextInfo: {}, retryTimes: {}]",
 //						externalContext.actionName,
@@ -521,7 +527,17 @@ public class IOHelper {
 		} catch (RuntimeException ex) {
 			logger.error("Failed to execute the taskContinueAction!!! [taskName: {}, contextInfo: {}, isMainActionFinished: {}]",
 					externalContext.actionName, externalContext.contextInfo.trigger(), (null == result ? "no" : "yes"), ex);
-			// 这里不再做出处理，会有别的问题吗？？
+			// 原注释: 「这里不再做出处理，会有别的问题吗？？」
+			// 回答: 在 @stage0-fix 之后，这里只记日志不再处理是【安全】的 ——
+			// 能走到本 catch 的运行时异常只有 completeAction 或 contextInfo 抛出这两种
+			// （mainAction/await 的异常已被内层 catch 交给 processTaskException 后 return，
+			//   cancelled 分支的 executeFailedAction 自带 try-catch）。
+			// 而 markFinish() 已先于 completeAction 执行，finishFlag 已置 true，
+			// 外层 do/while(!isFinish()) 必然退出，不会重放已经成功的 IO。
+			// 遗留风险1: completeAction 失败意味着"IO 成功但后续业务动作没做"，此处仅记日志，
+			//   调用方无从感知。属于 Stage 2（终态出口）范围，不在 Stage 0 内。
+			// 遗留风险2: 本 catch 的日志语句自身会调用 contextInfo.trigger()，若异常正是它抛出的，
+			//   则会二次抛出并逃逸出本方法。属既有问题，未在本次改动范围内。
 		}
 	}
 
@@ -532,9 +548,18 @@ public class IOHelper {
 			ex = AsyncWrapperException.getActuallyCause(ex);
 		
 		if (ex instanceof IOException || ex instanceof IOExceptionOnRuntime) {
-			logger.error("Async task result status is io exception, try to run the async task again. [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
-					externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, ex.getMessage(), ex);
-			executeRetryAction(externalContext);
+			// @stage0-fix: 修复前此分支无条件 executeRetryAction()，完全无视调用方传入的
+			// retryWhenFailed —— 使该标志对最常见的异常类型（IO 异常）形同虚设。
+			// 现在 IO 异常与其它异常遵循同一套语义：由 retryWhenFailed 决定重试还是走终态。
+			if (externalContext.retryWhenFailed) {
+				logger.error("Async task result status is io exception, try to run the async task again. [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
+						externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, ex.getMessage(), ex);
+				executeRetryAction(externalContext);
+			} else {
+				logger.error("Async task result status is io exception and retryWhenFailed=false, treat it as a terminal failure. [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
+						externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, ex.getMessage(), ex);
+				executeFailedAction(externalContext, ex);
+			}
 		} else {
 			logger.error("Async task has unknown exception! [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
 					externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, ex.getMessage(), ex);
