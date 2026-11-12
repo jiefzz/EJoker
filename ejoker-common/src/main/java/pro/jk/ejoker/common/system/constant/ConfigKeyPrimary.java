@@ -17,4 +17,24 @@ public final class ConfigKeyPrimary {
      */
     public static final String EJOKER_ASYNC_EXECUTOR_NAME_PREFIX = "ejoker.common.async.pool.thread.name.prefix";
 
+    /**
+     * IO 重试的最大尝试次数
+     */
+    public static final String EJOKER_IO_RETRY_MAX_ATTEMPTS = "ejoker.io.retry.maxAttempts";
+
+    /**
+     * IO 重试的基础退避时间，单位毫秒
+     */
+    public static final String EJOKER_IO_RETRY_BASE_DELAY_MILLIS = "ejoker.io.retry.baseDelayMillis";
+
+    /**
+     * IO 重试的退避上限，单位毫秒
+     */
+    public static final String EJOKER_IO_RETRY_MAX_DELAY_MILLIS = "ejoker.io.retry.maxDelayMillis";
+
+    /**
+     * IO 重试是否启用 Full Jitter
+     */
+    public static final String EJOKER_IO_RETRY_FULL_JITTER = "ejoker.io.retry.fullJitter";
+
 }
