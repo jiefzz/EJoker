@@ -34,6 +34,35 @@ public class IOHelper {
 
 	private final static Logger logger = LoggerFactory.getLogger(IOHelper.class);
 
+	private final RetryPolicy retryPolicy;
+
+	public IOHelper() {
+		this(RetryPolicy.fromControlTable());
+	}
+
+	IOHelper(RetryPolicy retryPolicy) {
+		this.retryPolicy = retryPolicy;
+	}
+
+	private <T> IOHelperContext<T> createContext(
+			String actionName,
+			IFunction<Future<T>> mainAction,
+			IVoidFunction1<IOHelperContext<T>> loopAction,
+			IVoidFunction1<T> completeAction,
+			IFunction<String> contextInfo,
+			IVoidFunction3<IOHelperContext<T>, Exception, String> faildAction,
+			boolean retryWhenFailed) {
+		return new IOHelperContext<>(
+				actionName,
+				mainAction,
+				loopAction,
+				completeAction,
+				contextInfo,
+				faildAction,
+				retryWhenFailed,
+				retryPolicy);
+	}
+
 	// 
 	// 整数标记的方法为IO任务循环起点，带点数的是采用默认的主循环并依次减少faildAction的入参的重载
 	// #1
@@ -45,7 +74,7 @@ public class IOHelper {
 			IVoidFunction completeAction,
 			IFunction<String> contextInfo,
 			IVoidFunction3<IOHelperContext<Void>, Exception, String> faildAction) {
-		IOHelperContext ioHelperContext = new IOHelperContext(
+		IOHelperContext ioHelperContext = createContext(
 				actionName,
 				mainAction,
 				loopAction,
@@ -53,7 +82,8 @@ public class IOHelper {
 					completeAction.trigger();
 				},
 				contextInfo,
-				faildAction);
+				faildAction,
+				false);
 		do {
 			ioHelperContext.loopAction.trigger(ioHelperContext);
 		} while(!ioHelperContext.isFinish());
@@ -140,7 +170,7 @@ public class IOHelper {
 			IFunction<String> contextInfo,
 			IVoidFunction3<IOHelperContext<Void>, Exception, String> faildAction,
 			boolean retryWhenFailed) {
-		IOHelperContext ioHelperContext = new IOHelperContext(
+		IOHelperContext ioHelperContext = createContext(
 				actionName,
 				mainAction,
 				loopAction,
@@ -242,13 +272,14 @@ public class IOHelper {
 			IVoidFunction1<T> completeAction,
 			IFunction<String> contextInfo,
 			IVoidFunction3<IOHelperContext<T>, Exception, String> faildAction) {
-		IOHelperContext<T> ioHelperContext = new IOHelperContext<>(
+		IOHelperContext<T> ioHelperContext = createContext(
 				actionName,
 				mainAction,
 				loopAction,
 				completeAction,
 				contextInfo,
-				faildAction);
+				faildAction,
+				false);
 		do {
 			ioHelperContext.loopAction.trigger(ioHelperContext);
 		} while(!ioHelperContext.isFinish());
@@ -334,7 +365,7 @@ public class IOHelper {
 			IFunction<String> contextInfo,
 			IVoidFunction3<IOHelperContext<T>, Exception, String> faildAction,
 			boolean retryWhenFailed) {
-		IOHelperContext<T> ioHelperContext = new IOHelperContext<>(
+		IOHelperContext<T> ioHelperContext = createContext(
 				actionName,
 				mainAction,
 				loopAction,
@@ -547,52 +578,41 @@ public class IOHelper {
 		while(ex instanceof AsyncWrapperException)
 			ex = AsyncWrapperException.getActuallyCause(ex);
 		
-		if (ex instanceof IOException || ex instanceof IOExceptionOnRuntime) {
-			// @stage0-fix: 修复前此分支无条件 executeRetryAction()，完全无视调用方传入的
-			// retryWhenFailed —— 使该标志对最常见的异常类型（IO 异常）形同虚设。
-			// 现在 IO 异常与其它异常遵循同一套语义：由 retryWhenFailed 决定重试还是走终态。
-			if (externalContext.retryWhenFailed) {
-				logger.error("Async task result status is io exception, try to run the async task again. [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
-						externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, ex.getMessage(), ex);
-				executeRetryAction(externalContext);
-			} else {
-				logger.error("Async task result status is io exception and retryWhenFailed=false, treat it as a terminal failure. [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
-						externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, ex.getMessage(), ex);
-				executeFailedAction(externalContext, ex);
-			}
-		} else {
-			logger.error("Async task has unknown exception! [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
+		if (externalContext.retryWhenFailed) {
+			logger.error("Async task failed, will consult retry policy. [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
 					externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, ex.getMessage(), ex);
-			if (externalContext.retryWhenFailed) {
-				executeRetryAction(externalContext);
-			} else {
-				executeFailedAction(externalContext, ex);
-			}
+			executeRetryAction(externalContext, ex);
+		} else {
+			logger.error("Async task failed and retryWhenFailed=false, treat it as a terminal failure. [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
+					externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, ex.getMessage(), ex);
+			executeFailedAction(externalContext, ex);
 		}
 	}
 
-	private <T> void executeRetryAction(IOHelperContext<T> externalContext) {
+	private <T> void executeRetryAction(IOHelperContext<T> externalContext, Exception exception) {
+		RetryPolicy policy = externalContext.retryPolicy;
+
+		if (!policy.retryOn(exception)) {
+			logger.error("Async task failed with non-retryable exception, treat it as a terminal failure. [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
+					externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, exception.getMessage(), exception);
+			executeFailedAction(externalContext, exception);
+			return;
+		}
+
 		externalContext.currentRetryTimes++;
+
+		if (externalContext.currentRetryTimes >= policy.getMaxAttempts()) {
+			logger.error("Async task retry budget exhausted, treat it as a terminal failure. [taskName: {}, contextInfo: {}, retryTimes: {}, maxAttempts: {}, errorMsg:{}]",
+					externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, policy.getMaxAttempts(), exception.getMessage(), exception);
+			executeFailedAction(externalContext, exception);
+			return;
+		}
+
+		long backoffMillis = policy.nextBackoffMillis(externalContext.currentRetryTimes);
 		try {
-			if (externalContext.currentRetryTimes >= externalContext.maxRetryTimes) {
-				/*
-				DiscardWrapper.sleepInterruptable(TimeUnit.MILLISECONDS, externalContext.retryInterval);
-				 */
-                try {
-                    TimeUnit.MILLISECONDS.sleep(externalContext.retryInterval);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-//				retryExecutorService.submit(() -> {
-//					DiscardWrapper.sleep(TimeUnit.MILLISECONDS, externalContext.retryInterval);
-//					externalContext.loopAction.trigger(externalContext);
-//					});
-			} else {
-//				externalContext.loopAction.trigger(externalContext);
-			}
-		} catch (RuntimeException ex) {
-			logger.error("Failed to execute the retryAction!!! [taskName: {}, contextInfo: {}]",
-					externalContext.actionName, externalContext.contextInfo.trigger(), ex);
+			TimeUnit.MILLISECONDS.sleep(backoffMillis);
+		} catch (InterruptedException e) {
+			throw new RuntimeException(e);
 		}
 	}
 	
@@ -624,15 +644,10 @@ public class IOHelper {
 		public final boolean retryWhenFailed;
 
 		/**
-		 * 最大的即时重试次数<br>
-		 * 若失败重试次数超过此数字，则执行重试时会等待 ${重试间隔} ms 的时间再重试
+		 * 重试策略<br />
+		 * 当 retryWhenFailed 为 true 时生效
 		 */
-		protected final int maxRetryTimes;
-
-		/**
-		 * 重试间隔
-		 */
-		protected final long retryInterval;
+		protected final RetryPolicy retryPolicy;
 
 		protected final String actionName;
 		
@@ -660,8 +675,7 @@ public class IOHelper {
 		 * @param contextInfo 用户自定义的上下文参数信息，供输出到日志详细或调试使用
 		 * @param faildAction io任务失败后触发的方法
 		 * @param retryWhenFailed 标记：失败后是否重试
-		 * @param maxRetryTimes 失败多少次后延时重试(?? 语义不符命名啊!!!)
-		 * @param retryInterval 延时重试的间隔时间(单位: 毫秒ms)
+		 * @param retryPolicy 重试策略
 		 */
 		public IOHelperContext(
 				String actionName,
@@ -670,11 +684,13 @@ public class IOHelper {
 				IVoidFunction1<T> completeAction,
 				IFunction<String> contextInfo,
 				IVoidFunction3<IOHelperContext<T>, Exception, String> faildAction,
-				boolean retryWhenFailed, int maxRetryTimes, long retryInterval) {
+				boolean retryWhenFailed,
+				RetryPolicy retryPolicy) {
 			
 			Ensure.notNullOrEmpty(actionName, "actionName");
 			Ensure.notNull(mainAction, "mainAction");
 			Ensure.notNull(loopAction, "loopAction");
+			Ensure.notNull(retryPolicy, "retryPolicy");
 			
 			this.actionName = actionName;
 			this.mainAction = mainAction;
@@ -684,20 +700,7 @@ public class IOHelper {
 			this.faildAction = faildAction;
 			
 			this.retryWhenFailed = retryWhenFailed;
-			this.maxRetryTimes = maxRetryTimes;
-			this.retryInterval = retryInterval;
-		}
-
-		public IOHelperContext(
-				String actionName,
-				IFunction<Future<T>> mainAction,
-				IVoidFunction1<IOHelperContext<T>> loopAction,
-				IVoidFunction1<T> completeAction,
-				IFunction<String> contextInfo,
-				IVoidFunction3<IOHelperContext<T>, Exception, String> faildAction,
-				boolean retryWhenFailed, int maxRetryTimes) {
-			this(actionName, mainAction, loopAction, completeAction, contextInfo, faildAction,
-					retryWhenFailed, maxRetryTimes, 1000l);
+			this.retryPolicy = retryPolicy;
 		}
 
 		public IOHelperContext(
@@ -709,7 +712,7 @@ public class IOHelper {
 				IVoidFunction3<IOHelperContext<T>, Exception, String> faildAction,
 				boolean retryWhenFailed) {
 			this(actionName, mainAction, loopAction, completeAction, contextInfo, faildAction,
-					retryWhenFailed, 3);
+					retryWhenFailed, RetryPolicy.fromControlTable());
 		}
 
 		public IOHelperContext(

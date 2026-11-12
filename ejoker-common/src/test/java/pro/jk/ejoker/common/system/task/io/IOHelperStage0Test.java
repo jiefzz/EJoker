@@ -33,7 +33,7 @@ import pro.jk.ejoker.common.system.functional.IFunction;
 @Timeout(value = 10, unit = TimeUnit.SECONDS)
 public class IOHelperStage0Test {
 
-	private final IOHelper ioHelper = new IOHelper();
+	private final IOHelper ioHelper = new IOHelper(RetryPolicy.defaultPolicy());
 
 	private final static IFunction<String> NO_CONTEXT = () -> "unit-test";
 

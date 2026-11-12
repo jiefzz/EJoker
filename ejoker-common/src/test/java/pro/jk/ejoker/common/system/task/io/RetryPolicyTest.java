@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.DoubleSupplier;
 
@@ -15,6 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
 import org.junit.jupiter.api.TestMethodOrder;
+
+import pro.jk.ejoker.common.system.component.ControlTable;
 
 /**
  * 锁住 {@link RetryPolicy} 的默认值、ControlTable 覆盖、异常分类与 Full Jitter 边界。
@@ -41,9 +45,22 @@ public class RetryPolicyTest {
 		System.clearProperty("ejoker.io.retry.fullJitter");
 	}
 
+	@SuppressWarnings("unchecked")
+	private static void resetControlTableCache() {
+		try {
+			Field field = ControlTable.class.getDeclaredField("CONFIG_CACHE_STORE");
+			field.setAccessible(true);
+			Map<Object, Object> cache = (Map<Object, Object>) field.get(null);
+			cache.clear();
+		} catch (ReflectiveOperationException e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
 	@Test
 	@Order(1)
 	public void testControlTableOverride() {
+		resetControlTableCache();
 		RetryPolicy policy = RetryPolicy.fromControlTable();
 		assertEquals(9, policy.getMaxAttempts());
 		assertEquals(300L, policy.getBaseDelayMillis());
