@@ -44,6 +44,46 @@ public class IOHelper {
 		this.retryPolicy = retryPolicy;
 	}
 
+	/**
+	 * 返回一个绑定了指定重试策略的 IOHelper 视图，用于【按调用点覆盖重试策略】。
+	 * <p>
+	 * 背景：IOHelper 是被 IoC 容器装配的<b>单例</b>，其重试策略由 ControlTable 全局配置决定。
+	 * 但不同调用点的失败语义并不相同 —— 命令提交要重试 ES 乐观并发冲突，
+	 * 快照读取失败即失败不该重试，MQ 发送则该重试一切瞬时故障。
+	 * 若没有覆盖手段，这些差异就只能写死在全局配置里，无法分场景表达。
+	 * <p>
+	 * 用法：
+	 * <pre>
+	 * ioHelper.withRetryPolicy(RetryPolicy.none())
+	 *        .tryAsyncAction2("Snapshot", mainAction, completeAction, contextInfo, faildAction, true);
+	 * </pre>
+	 * <p>
+	 * 该方法返回<b>新实例</b>（IOHelper 本身无状态，仅持有策略），
+	 * 不影响容器装配的单例，也不影响其它调用点。
+	 * <p>
+	 * 注意：策略只决定「重试多少次、退避多久、哪些异常可重试」；
+	 * 是否启用重试仍由 {@code retryWhenFailed} 参数控制。
+	 * 传入 maxAttempts=1 的策略（{@link RetryPolicy#none()}）即等价于「不重试」。
+	 *
+	 * @param retryPolicy 本次调用链使用的重试策略；为 null 时视为使用全局策略
+	 * @return 绑定了该策略的 IOHelper 实例
+	 */
+	public IOHelper withRetryPolicy(RetryPolicy retryPolicy) {
+		if (null == retryPolicy) {
+			return this;
+		}
+		return new IOHelper(retryPolicy);
+	}
+
+	/**
+	 * 获取当前实例使用的重试策略。
+	 *
+	 * @return 重试策略，永不为 null
+	 */
+	public RetryPolicy getRetryPolicy() {
+		return retryPolicy;
+	}
+
 	private <T> IOHelperContext<T> createContext(
 			String actionName,
 			IFunction<Future<T>> mainAction,
@@ -52,6 +92,33 @@ public class IOHelper {
 			IFunction<String> contextInfo,
 			IVoidFunction3<IOHelperContext<T>, Exception, String> faildAction,
 			boolean retryWhenFailed) {
+		return createContext(
+				actionName,
+				mainAction,
+				loopAction,
+				completeAction,
+				contextInfo,
+				faildAction,
+				retryWhenFailed,
+				this.retryPolicy);
+	}
+
+	/**
+	 * 创建执行上下文，并允许调用点【单独指定重试策略】。
+	 * <p>
+	 * 传入的 {@link RetryPolicy} 只作用于本次调用，不影响 IOHelper 实例上的全局策略。
+	 *
+	 * @param retryPolicy 本次调用的重试策略；为 null 时回退到 IOHelper 的全局策略
+	 */
+	private <T> IOHelperContext<T> createContext(
+			String actionName,
+			IFunction<Future<T>> mainAction,
+			IVoidFunction1<IOHelperContext<T>> loopAction,
+			IVoidFunction1<T> completeAction,
+			IFunction<String> contextInfo,
+			IVoidFunction3<IOHelperContext<T>, Exception, String> faildAction,
+			boolean retryWhenFailed,
+			RetryPolicy retryPolicy) {
 		return new IOHelperContext<>(
 				actionName,
 				mainAction,
@@ -60,7 +127,7 @@ public class IOHelper {
 				contextInfo,
 				faildAction,
 				retryWhenFailed,
-				retryPolicy);
+				(null == retryPolicy) ? this.retryPolicy : retryPolicy);
 	}
 
 	// 
@@ -722,7 +789,11 @@ public class IOHelper {
 					contextInfo,
 					faildAction,
 					retryWhenFailed,
-					new RetryPolicy(maxRetryTimes, retryInterval, retryInterval, false, null, null));
+					// 【语义变更】maxRetryTimes 现被解释为「最大尝试次数」上限。
+					// 历史语义是「达到该次数后才开始延时，且重试无上限」—— 即它本是延时阈值而非上限
+					// （原作者参数注释里的「?? 语义不符命名啊!!!」正是在说这件事）。
+					// 现在重试一律有界，故取其上限含义；详见 RetryPolicy#legacyOf。
+					RetryPolicy.legacyOf(maxRetryTimes, retryInterval));
 		}
 
 		@Deprecated

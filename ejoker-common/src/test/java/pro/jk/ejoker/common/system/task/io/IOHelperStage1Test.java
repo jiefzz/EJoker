@@ -1,6 +1,8 @@
 package pro.jk.ejoker.common.system.task.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -168,5 +170,88 @@ public class IOHelperStage1Test {
 
 		assertEquals(4, context.retryPolicy.getMaxAttempts(), "旧 public 构造器应保留并映射到 maxAttempts");
 		assertEquals(250L, context.retryPolicy.getBaseDelayMillis(), "旧 public 构造器应保留并映射到 baseDelayMillis");
+	}
+
+	/**
+	 * per-call-site 覆盖: 同一 IOHelper 实例上，不同调用点可以使用不同的重试策略。
+	 * <p>
+	 * 背景: IOHelper 由 IoC 装配为单例，策略默认来自 ControlTable 全局配置。
+	 * 但「命令提交要重试 ES 冲突」与「快照读取失败即失败」这类差异无法用全局配置表达。
+	 */
+	@Test
+	public void testPerCallSiteRetryPolicyOverride() {
+		AtomicInteger globalInvocations = new AtomicInteger(0);
+		AtomicInteger overriddenInvocations = new AtomicInteger(0);
+		AtomicInteger failedInvocations = new AtomicInteger(0);
+
+		// 全局策略：最多 3 次
+		IOHelper ioHelper = new IOHelper(new RetryPolicy(3, 0L, 0L, false, () -> 0.0d, null));
+
+		// 调用点 A：沿用全局策略
+		ioHelper.tryAsyncAction2(
+				"GlobalPolicy",
+				ioFailureAction(globalInvocations),
+				r -> { },
+				NO_CONTEXT,
+				e -> failedInvocations.incrementAndGet(),
+				true
+				);
+
+		// 调用点 B：覆盖为「不重试」
+		ioHelper.withRetryPolicy(RetryPolicy.none()).tryAsyncAction2(
+				"OverriddenPolicy",
+				ioFailureAction(overriddenInvocations),
+				r -> { },
+				NO_CONTEXT,
+				e -> failedInvocations.incrementAndGet(),
+				true
+				);
+
+		assertEquals(3, globalInvocations.get(), "沿用全局策略的调用点应执行 3 次");
+		assertEquals(1, overriddenInvocations.get(), "覆盖为 none() 的调用点应只执行 1 次");
+		assertEquals(2, failedInvocations.get(), "两个调用点都应各自进入一次终态失败");
+	}
+
+	/**
+	 * per-call-site 覆盖不应污染全局单例：withRetryPolicy 返回新实例。
+	 */
+	@Test
+	public void testWithRetryPolicyDoesNotMutateOriginalInstance() {
+		IOHelper ioHelper = new IOHelper(new RetryPolicy(3, 0L, 0L, false, () -> 0.0d, null));
+		IOHelper overridden = ioHelper.withRetryPolicy(RetryPolicy.withMaxAttempts(7));
+
+		assertNotSame(ioHelper, overridden, "withRetryPolicy 应返回新实例");
+		assertEquals(3, ioHelper.getRetryPolicy().getMaxAttempts(), "原实例的策略不应被改写");
+		assertEquals(7, overridden.getRetryPolicy().getMaxAttempts(), "新实例应使用覆盖后的策略");
+		assertSame(ioHelper, ioHelper.withRetryPolicy(null), "传入 null 应返回原实例");
+	}
+
+	/**
+	 * 黑名单模型下，通用 RuntimeException 也应重试（有界），而不是一次就判终态。
+	 * <p>
+	 * 这与「IO 异常才重试」的旧行为不同：ES 乐观并发冲突继承自 RuntimeException 而非
+	 * IOException，白名单模型会把它漏掉。
+	 */
+	@Test
+	public void testGenericRuntimeExceptionIsRetriedUnderBlacklistModel() {
+		AtomicInteger mainActionInvocations = new AtomicInteger(0);
+		AtomicInteger failedInvocations = new AtomicInteger(0);
+
+		IOHelper ioHelper = new IOHelper(new RetryPolicy(3, 0L, 0L, false, () -> 0.0d, null));
+
+		ioHelper.tryAsyncAction2(
+				"GenericRuntimeFailure",
+				() -> {
+					mainActionInvocations.incrementAndGet();
+					throw new RuntimeException("unknown transient failure");
+				},
+				r -> { },
+				NO_CONTEXT,
+				e -> failedInvocations.incrementAndGet(),
+				true
+				);
+
+		assertEquals(3, mainActionInvocations.get(), "黑名单模型下普通 RuntimeException 也应有界重试");
+		assertEquals(1, failedInvocations.get(), "预算耗尽后应进入一次终态失败");
 	}
 }

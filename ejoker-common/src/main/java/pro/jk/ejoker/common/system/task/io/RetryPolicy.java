@@ -7,6 +7,10 @@ import java.util.function.Predicate;
 import pro.jk.ejoker.common.system.constant.ConfigKeyPrimary;
 import pro.jk.ejoker.common.system.component.ControlTable;
 import pro.jk.ejoker.common.system.component.ControlTable.RegisterTuple;
+import pro.jk.ejoker.common.system.exceptions.ArgumentException;
+import pro.jk.ejoker.common.system.exceptions.ArgumentNullException;
+import pro.jk.ejoker.common.system.exceptions.ArgumentOutOfRangeException;
+import pro.jk.ejoker.common.system.exceptions.NonRetryableException;
 
 /**
  * 有界重试策略。
@@ -67,6 +71,31 @@ public final class RetryPolicy {
 				null);
 	}
 
+	/**
+	 * 「不重试」策略：任何失败都直接进入终态。
+	 * <p>
+	 * 适用于失败即不可恢复的调用点（如快照读取），配合
+	 * {@link IOHelper#withRetryPolicy(RetryPolicy)} 使用。
+	 */
+	public static RetryPolicy none() {
+		return new RetryPolicy(1, 0L, 0L, false, null, null);
+	}
+
+	/**
+	 * 指定最大尝试次数的重试策略，沿用默认的退避参数与黑名单分类。
+	 *
+	 * @param maxAttempts 最大尝试次数（小于 1 时按 1 处理）
+	 */
+	public static RetryPolicy withMaxAttempts(int maxAttempts) {
+		return new RetryPolicy(
+				maxAttempts,
+				DEFAULT_BASE_DELAY_MILLIS,
+				DEFAULT_MAX_DELAY_MILLIS,
+				DEFAULT_FULL_JITTER_ENABLED,
+				null,
+				null);
+	}
+
 	public static RetryPolicy fromControlTable() {
 		registerControlTableKeys();
 
@@ -82,6 +111,27 @@ public final class RetryPolicy {
 				fullJitterEnabled,
 				null,
 				null);
+	}
+
+	/**
+	 * 由 legacy 的 {@code maxRetryTimes} / {@code retryInterval} 构造策略。
+	 * <p>
+	 * <b>【语义变更】</b>历史语义是「达到 maxRetryTimes 次<b>之后</b>才开始延时重试，
+	 * 且重试<b>无上限</b>」—— 即 maxRetryTimes 是<b>延时阈值</b>，不是<b>尝试上限</b>
+	 * （原作者在参数注释里写的「?? 语义不符命名啊!!!」正是在说这件事）。
+	 * <p>
+	 * 现在的重试一律有界，因此把该数值解释为<b>最大尝试次数</b>上限，
+	 * 并以 retryInterval 作为固定退避间隔（关闭 Full Jitter，保持旧版时序确定性）。
+	 * <p>
+	 * 换言之：legacy 调用方若曾依赖「无限重试」，现在会得到「最多试 maxRetryTimes 次」。
+	 * 这正是 Stage 1 要修掉的缺陷（无上限重试会静默卡死调用方），
+	 * 但对外部调用方属于行为变更，故在此显式记录。
+	 *
+	 * @param maxRetryTimes 现被解释为最大尝试次数上限
+	 * @param retryInterval 固定退避间隔（毫秒）
+	 */
+	public static RetryPolicy legacyOf(int maxRetryTimes, long retryInterval) {
+		return new RetryPolicy(maxRetryTimes, retryInterval, retryInterval, false, null, null);
 	}
 
 	private static void registerControlTableKeys() {
@@ -117,15 +167,70 @@ public final class RetryPolicy {
 		);
 	}
 
+	/**
+	 * 默认「不可重试」的异常类型黑名单。
+	 * <p>
+	 * 采用<b>黑名单</b>而非白名单模型：默认重试一切异常，只排除下列确定性的永久失败——
+	 * 重试它们只会白白消耗退避时间并掩盖真实缺陷。
+	 * <p>
+	 * 黑名单之外的异常一律视为可重试，包括但不限于：
+	 * <ul>
+	 * <li>{@link IOException} / {@link IOExceptionOnRuntime}（MQ、RPC 等基础设施瞬时故障）；</li>
+	 * <li>ES 乐观并发冲突（{@code UnmatchEventVersionException}、{@code AggregateRootReferenceChangedException}）——
+	 *     它们继承自 {@code RuntimeException} 而非 {@code IOException}，
+	 *     若用白名单模型会被漏掉，而它们恰恰是最该重试的（重载聚合后重放命令）；</li>
+	 * <li>其它任何 {@code RuntimeException}。</li>
+	 * </ul>
+	 * 业务侧若需表达「这个失败重试也没用」，让异常实现 {@link NonRetryableException} 即可
+	 * （ejoker-core 的业务异常受模块依赖方向限制，无法在此直接列举）。
+	 */
+	private final static Class<?>[] DEFAULT_NON_RETRYABLE_TYPES = new Class<?>[] {
+			// JDK：参数非法、空指针、状态非法 —— 多为编程错误，重试无意义
+			IllegalArgumentException.class,
+			NullPointerException.class,
+			IllegalStateException.class,
+			// EJoker 自有的参数类异常（均直接继承 RuntimeException，无共同基类，需逐个列出）
+			ArgumentException.class,
+			ArgumentNullException.class,
+			ArgumentOutOfRangeException.class
+	};
+
+	/**
+	 * cause 链遍历的最大深度上限，防止异常链成环导致死循环。
+	 * <p>
+	 * 该上限是<b>承重</b>的：若遍历逻辑回退为「只认 IO 异常」之类的无界 while 循环，
+	 * 环状 cause 链会让判定线程永久自旋。包级可见以便测试直接引用该常量。
+	 */
+	static final int MAX_CAUSE_DEPTH = 32;
+
+	/**
+	 * 默认的可重试判定：黑名单模型。
+	 * <p>
+	 * 沿 cause 链逐环检查，只要<b>任意一环</b>命中黑名单类型或实现了
+	 * {@link NonRetryableException}，即判定为不可重试。
+	 * <p>
+	 * 「任意一环命中即不可重试」是有意为之：包装异常（{@code AsyncWrapperException}、
+	 * {@code IOExceptionOnRuntime} 等）不应掩盖内层的确定性失败。
+	 */
 	private static boolean defaultRetryOn(Throwable t) {
 		Throwable current = t;
-		while (null != current) {
-			if (current instanceof IOException || current instanceof IOExceptionOnRuntime) {
-				return true;
+		for (int depth = 0; null != current && depth < MAX_CAUSE_DEPTH; depth++) {
+			if (current instanceof NonRetryableException) {
+				return false;
 			}
-			current = current.getCause();
+			for (Class<?> nonRetryableType : DEFAULT_NON_RETRYABLE_TYPES) {
+				if (nonRetryableType.isInstance(current)) {
+					return false;
+				}
+			}
+			Throwable cause = current.getCause();
+			// 防御异常链成环
+			if (cause == current) {
+				break;
+			}
+			current = cause;
 		}
-		return false;
+		return true;
 	}
 
 	public int getMaxAttempts() {
