@@ -1,11 +1,13 @@
 package pro.jk.ejoker.common.system.task.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -253,5 +255,44 @@ public class IOHelperStage1Test {
 
 		assertEquals(3, mainActionInvocations.get(), "黑名单模型下普通 RuntimeException 也应有界重试");
 		assertEquals(1, failedInvocations.get(), "预算耗尽后应进入一次终态失败");
+	}
+
+	/**
+	 * 取消（CancellationException）必须显式终态化，不依赖「其继承 IllegalStateException
+	 * 恰好命中默认黑名单」的巧合 —— 即使调用点自定义 retryOn 谓词判其为可重试，
+	 * 也不得重放 mainAction（防双发）。
+	 */
+	@Test
+	public void testCancellationGoesTerminalEvenWhenRetryOnSaysRetry() {
+		AtomicInteger mainActionInvocations = new AtomicInteger(0);
+		AtomicInteger failedInvocations = new AtomicInteger(0);
+		AtomicReference<Exception> capturedException = new AtomicReference<>();
+		AtomicReference<String> capturedMsg = new AtomicReference<>();
+
+		// retryOn 一律返回 true 的自定义策略 —— 模拟自定义谓词判取消可重试的最严苛场景
+		IOHelper ioHelper = new IOHelper(new RetryPolicy(3, 0L, 0L, false, () -> 0.0d, t -> true));
+
+		ioHelper.tryAsyncAction2(
+				"CancelledFuture",
+				() -> {
+					mainActionInvocations.incrementAndGet();
+					// 模拟 future.get() 对已取消任务抛出的形态（await 不包装 CancellationException，原样到达 processTaskException）
+					throw new CancellationException("future was cancelled");
+				},
+				r -> { },
+				NO_CONTEXT,
+				(c, e, msg) -> {
+					failedInvocations.incrementAndGet();
+					capturedException.set(e);
+					capturedMsg.set(msg);
+				},
+				true
+				);
+
+		assertEquals(1, mainActionInvocations.get(), "取消绝不能触发重试/重放 mainAction（防双发）");
+		assertEquals(1, failedInvocations.get(), "取消应恰好进入一次终态失败");
+		assertTrue(capturedException.get() instanceof CancellationException, "faildAction 应收到 CancellationException 本尊");
+		assertNotNull(capturedMsg.get(), "errorMsg 应为描述性信息而非 null（get() 抛出的裸 CancellationException 无 message）");
+		assertTrue(capturedMsg.get().contains("CancelledFuture"), "errorMsg 应包含任务名");
 	}
 }

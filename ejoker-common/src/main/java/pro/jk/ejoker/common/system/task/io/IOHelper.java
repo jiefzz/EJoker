@@ -652,11 +652,32 @@ public class IOHelper {
 		// 2. 走终态失败而非退避重试 —— markFinish 保证外层 do/while(!isFinish()) 退出，
 		//    不会在被中断的线程上重放 mainAction，也不会在退避 sleep 上继续空耗重试预算。
 		if (isInterruption(ex)) {
-			Thread.currentThread().interrupt();
 			logger.error("Async task was interrupted, treat it as a terminal failure without retry. [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
 					externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, ex.getMessage(), ex);
 			String interruptInfo = StringUtilx.fmt("Async task was interrupted! [taskName: {}]", externalContext.actionName);
+			// 先终态化（markFinish + faildAction 通知）再恢复中断标志：
+			// faildAction 必须在「无标志」的线程上执行 —— 若先置位，回调内的任何阻塞调用
+			// （sleep/get/latch.await）会立刻抛 InterruptedException 并被 executeFailedAction
+			// 的 catch 吞掉，善后逻辑执行到一半。标志在 do/while 退出前恢复即可，
+			// tryAsyncAction2 返回后的上层调用栈仍能感知「线程已被请求停止」。
+			// faildAction 侧如需区分中断，凭 exception 类型判断，不依赖线程标志。
 			executeFailedAction(externalContext, ex, interruptInfo);
+			Thread.currentThread().interrupt();
+			return;
+		}
+		
+		// 【取消终态化】future.get() 对已取消任务抛 CancellationException（await 不拦截它，
+		// 原样到达此处）。取消是上层放弃本次任务结果的信号，同样不是可重试的 IO 故障。
+		// 默认黑名单因 CancellationException 继承 IllegalStateException 而「碰巧」判其
+		// 不可重试，但该判定依赖 JDK 继承巧合 —— 调用点自定义 retryOn 谓词完全可能判其
+		// 可重试，一旦重试即重放 mainAction，而 cancel(true) 的任务副作用可能已部分发生
+		// （双发风险）。故在此显式终态化，并与 taskContinueAction 的 isCancelled 防御分支
+		// 保持一致的失败呈现形态（CancellationException 本尊 + 描述性 errorMsg）。
+		if (ex instanceof CancellationException) {
+			logger.warn("Async task was cancelled, treat it as a terminal failure without retry. [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
+					externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, ex.getMessage(), ex);
+			String cancelInfo = StringUtilx.fmt("Async task was cancelled! [taskName: {}]", externalContext.actionName);
+			executeFailedAction(externalContext, ex, cancelInfo);
 			return;
 		}
 		
@@ -694,16 +715,18 @@ public class IOHelper {
 		try {
 			TimeUnit.MILLISECONDS.sleep(backoffMillis);
 		} catch (InterruptedException e) {
-			// 退避期间被中断：恢复中断标志并直接终态化，不再向上抛 RuntimeException。
+			// 退避期间被中断：直接终态化，不再向上抛 RuntimeException。
 			// 原实现 throw new RuntimeException(e) 会从 processTaskException 逃逸到
 			// taskContinueAction 的外层 catch(RuntimeException) 被吞掉，且 finishFlag 未置，
 			// 外层 do/while(!isFinish()) 将重放 mainAction —— 相当于在线程刚被请求停止的
 			// 背景下把 IO 主动作再执行一遍（progress.md 遗留项 M-5 的另一半）。
-			Thread.currentThread().interrupt();
 			logger.error("Backoff sleep was interrupted, abort retrying and treat it as a terminal failure. [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
 					externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, e.getMessage(), e);
 			String interruptInfo = StringUtilx.fmt("Backoff was interrupted! [taskName: {}]", externalContext.actionName);
+			// 先终态化（markFinish + faildAction）再恢复标志，避免回调在带标志的线程上
+			// 执行时阻塞调用被立刻打断、善后做一半（同 processTaskException 中断分支）。
 			executeFailedAction(externalContext, e, interruptInfo);
+			Thread.currentThread().interrupt();
 		}
 	}
 
