@@ -276,20 +276,36 @@ public class DefaultProcessingCommandHandler implements IProcessingCommandHandle
 				);
 	}
 
+    /**
+     * 扒皮获取真实异常。内部按 Throwable 遍历（getActuallyCause 解 AsyncWrapperException、
+     * 手动解 InvocationTargetException），最终收敛回 Exception：
+     * 根因为 Error（经反射调用或异步任务包装后解出）时包一层 RuntimeException，
+     * 调用方可经 getCause() 还原原始 Throwable。
+     */
     private Exception getRealException(Exception exception) {
         if (exception == null) {
             return null;
         }
+        Throwable current = exception;
         for( ;; ) {
         	// 对特定情况的异常进行扒皮操作。
-        	if (exception instanceof AsyncWrapperException) {
-        		exception = AsyncWrapperException.getActuallyCause(exception);
-	        } else if (exception instanceof InvocationTargetException) {
-	        	exception = (Exception )exception.getCause();
-	        } else
-	        	break;
+        	if (current instanceof AsyncWrapperException) {
+        		current = AsyncWrapperException.getActuallyCause(current);
+            } else if (current instanceof InvocationTargetException) {
+            	// cause 缺失或自环时扒不动了，跳出交给下方收敛逻辑
+            	//(历史实现 (Exception) getCause() 对 Error 根因会抛 ClassCastException)
+            	Throwable cause = current.getCause();
+            	if (null == cause || cause == current)
+            		break;
+            	current = cause;
+            } else
+            	break;
         }
-        return exception;
+        if (current instanceof Exception)
+        	return (Exception )current;
+        return new RuntimeException(
+        		StringUtilx.fmt("Non-Exception throwable escaped from command execution: {}", current),
+        		current);
     }
 	
 	

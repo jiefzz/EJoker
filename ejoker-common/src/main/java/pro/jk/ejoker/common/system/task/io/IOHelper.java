@@ -550,10 +550,9 @@ public class IOHelper {
 				task = externalContext.mainAction.trigger();
 				result = await(task); //task.get();
 			} catch (Exception ex) {
-				Exception cause = (ex instanceof AsyncWrapperException)
-						? AsyncWrapperException.getActuallyCause(ex)
-								: ex;
-				processTaskException(externalContext, cause);
+				// getActuallyCause 幂等：非包装异常原样返回、Error 根因原样返回、永不返回 null，
+				// 故无需 instanceof 预判，统一交给 processTaskException 按 Throwable 处理。
+				processTaskException(externalContext, AsyncWrapperException.getActuallyCause(ex));
 				return;
 			}
 			if (task.isCancelled()) {
@@ -639,11 +638,18 @@ public class IOHelper {
 		}
 	}
 
-	private <T> void processTaskException(IOHelperContext<T> externalContext, Exception exception) {
+	/**
+	 * 异常终态化处理入口。入参已由 {@link #taskContinueAction} 解过一层包，
+	 * 此处防御性再解一次（{@link AsyncWrapperException#getActuallyCause} 幂等），
+	 * 保证后续判定（isInterruption / retryOn / faildAction）面对的是最内层 Throwable。
+	 * <p>
+	 * 入参可能是任意 Throwable，包括 Error 根因（OOM/StackOverflowError 等经
+	 * FutureTask 捕获包装后在此解出）——Error 交由 {@link RetryPolicy#retryOn}
+	 * 判定为不可重试，一次进入终态，绝无强转 Exception 的环节。
+	 */
+	private <T> void processTaskException(IOHelperContext<T> externalContext, Throwable exception) {
 		
-		Exception ex = exception;
-		while(ex instanceof AsyncWrapperException)
-			ex = AsyncWrapperException.getActuallyCause(ex);
+		Throwable ex = AsyncWrapperException.getActuallyCause(exception);
 		
 		// 【中断终态化】中断类异常（InterruptedException / InterruptedIOException / ClosedByInterruptException）
 		// 是上层请求停止的协作式取消信号，不是可重试的瞬时 IO 故障，须在重试判定之前拦截：
@@ -692,7 +698,7 @@ public class IOHelper {
 		}
 	}
 
-	private <T> void executeRetryAction(IOHelperContext<T> externalContext, Exception exception) {
+	private <T> void executeRetryAction(IOHelperContext<T> externalContext, Throwable exception) {
 		RetryPolicy policy = externalContext.retryPolicy;
 
 		if (!policy.retryOn(exception)) {
@@ -760,15 +766,25 @@ public class IOHelper {
 		return false;
 	}
 	
-	private <T> void executeFailedAction(IOHelperContext<T> externalContext, Exception exception) {
+	private <T> void executeFailedAction(IOHelperContext<T> externalContext, Throwable exception) {
 		executeFailedAction(externalContext, exception, exception.getMessage());
 	}
 
-	private <T> void executeFailedAction(IOHelperContext<T> externalContext, Exception exception, String errorMsg) {
+	/**
+	 * 终态化并触发 faildAction 回调。入参为任意 Throwable（含 Error 根因）；
+	 * 回调签名是 Exception，非 Exception 的 Throwable 包一层 RuntimeException 传递，
+	 * 调用方可经 getCause() 还原原始对象，保持「回调必收到非 null 的 Exception」的契约。
+	 */
+	private <T> void executeFailedAction(IOHelperContext<T> externalContext, Throwable exception, String errorMsg) {
 		externalContext.markFinish();
 		try {
-			if(null != externalContext.faildAction)
-				externalContext.faildAction.trigger(externalContext, exception, errorMsg);
+			if(null != externalContext.faildAction) {
+				Exception forCallback = (exception instanceof Exception)
+						? (Exception ) exception
+						: new RuntimeException(StringUtilx.fmt(
+								"Non-Exception throwable escaped from async task: {}", exception), exception);
+				externalContext.faildAction.trigger(externalContext, forCallback, errorMsg);
+			}
 	    } catch (RuntimeException ex) {
 	        logger.error("Failed to execute the failedAction!!! [taskName: {}, contextInfo: {}]",
 	        				externalContext.actionName, externalContext.contextInfo.trigger(), ex);

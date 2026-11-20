@@ -215,6 +215,12 @@ public final class RetryPolicy {
 	private static boolean defaultRetryOn(Throwable t) {
 		Throwable current = t;
 		for (int depth = 0; null != current && depth < MAX_CAUSE_DEPTH; depth++) {
+			// Error（OOM / StackOverflowError / LinkageError 等）意味着 JVM 级永久损伤，
+			// 重试只会加剧恶化并拖垮重试预算，判定为不可重试。
+			// 因 Error 家族无法穷举具体类型，故不走 Class[] 黑名单而用 instanceof 直判。
+			if (current instanceof Error) {
+				return false;
+			}
 			if (current instanceof NonRetryableException) {
 				return false;
 			}
