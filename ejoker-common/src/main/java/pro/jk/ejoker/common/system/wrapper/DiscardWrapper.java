@@ -2,8 +2,6 @@ package pro.jk.ejoker.common.system.wrapper;
 
 import java.util.concurrent.TimeUnit;
 
-import pro.jk.ejoker.common.legacy.Suspendable;
-
 /**
  * 這個是之前對quasar的調用的sleep的封裝，但是以後不需要了
  * <br /> 工程中有啊較多使用這個的地方，這裡就保留為 TimeUnit#sleep 的委託調用算了；
@@ -17,7 +15,6 @@ public class DiscardWrapper {
 	 * 
 	 * @param millis
 	 */
-	@Suspendable
 	public static void sleepInterruptable(long millis) {
 		sleepInterruptable(TimeUnit.MILLISECONDS, millis);
 	}
@@ -30,7 +27,6 @@ public class DiscardWrapper {
 	 * @param unit
 	 * @param millis
 	 */
-	@Suspendable
 	public static void sleepInterruptable(TimeUnit unit, long millis) {
 		try {
 			unit.sleep(millis);
@@ -39,12 +35,10 @@ public class DiscardWrapper {
 		}
 	}
 
-	@Suspendable
 	public static void sleep(long millis) throws InterruptedException {
 		sleep(TimeUnit.MILLISECONDS, millis);
 	}
 
-	@Suspendable
 	public static void sleep(TimeUnit unit, long millis) throws InterruptedException {
 		unit.sleep(millis);
 	}

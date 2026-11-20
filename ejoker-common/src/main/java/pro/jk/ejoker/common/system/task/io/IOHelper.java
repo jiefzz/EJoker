@@ -3,6 +3,8 @@ package pro.jk.ejoker.common.system.task.io;
 import static pro.jk.ejoker.common.system.extension.LangUtil.await;
 
 import java.io.IOException;
+import java.io.InterruptedIOException;
+import java.nio.channels.ClosedByInterruptException;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -11,7 +13,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import pro.jk.ejoker.common.legacy.Suspendable;
 import pro.jk.ejoker.common.context.annotation.context.EService;
 import pro.jk.ejoker.common.system.enhance.StringUtilx;
 import pro.jk.ejoker.common.system.extension.AsyncWrapperException;
@@ -539,7 +540,6 @@ public class IOHelper {
 	 * 如果自己实现loopAction的话请务必在自定义的loopAction中执行当前调用
 	 * @param externalContext
 	 */
-	@Suspendable
 	public <T> void taskContinueAction(IOHelperContext<T> externalContext) {
 		
 		Future<T> task = null;
@@ -645,6 +645,21 @@ public class IOHelper {
 		while(ex instanceof AsyncWrapperException)
 			ex = AsyncWrapperException.getActuallyCause(ex);
 		
+		// 【中断终态化】中断类异常（InterruptedException / InterruptedIOException / ClosedByInterruptException）
+		// 是上层请求停止的协作式取消信号，不是可重试的瞬时 IO 故障，须在重试判定之前拦截：
+		// 1. 恢复中断标志 —— LangUtil.await 捕获 InterruptedException 时 JVM 已清除标志，
+		//    若不恢复，do/while 之上的调用栈对「线程已被请求停止」失去感知；
+		// 2. 走终态失败而非退避重试 —— markFinish 保证外层 do/while(!isFinish()) 退出，
+		//    不会在被中断的线程上重放 mainAction，也不会在退避 sleep 上继续空耗重试预算。
+		if (isInterruption(ex)) {
+			Thread.currentThread().interrupt();
+			logger.error("Async task was interrupted, treat it as a terminal failure without retry. [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
+					externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, ex.getMessage(), ex);
+			String interruptInfo = StringUtilx.fmt("Async task was interrupted! [taskName: {}]", externalContext.actionName);
+			executeFailedAction(externalContext, ex, interruptInfo);
+			return;
+		}
+		
 		if (externalContext.retryWhenFailed) {
 			logger.error("Async task failed, will consult retry policy. [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
 					externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, ex.getMessage(), ex);
@@ -679,8 +694,47 @@ public class IOHelper {
 		try {
 			TimeUnit.MILLISECONDS.sleep(backoffMillis);
 		} catch (InterruptedException e) {
-			throw new RuntimeException(e);
+			// 退避期间被中断：恢复中断标志并直接终态化，不再向上抛 RuntimeException。
+			// 原实现 throw new RuntimeException(e) 会从 processTaskException 逃逸到
+			// taskContinueAction 的外层 catch(RuntimeException) 被吞掉，且 finishFlag 未置，
+			// 外层 do/while(!isFinish()) 将重放 mainAction —— 相当于在线程刚被请求停止的
+			// 背景下把 IO 主动作再执行一遍（progress.md 遗留项 M-5 的另一半）。
+			Thread.currentThread().interrupt();
+			logger.error("Backoff sleep was interrupted, abort retrying and treat it as a terminal failure. [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
+					externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, e.getMessage(), e);
+			String interruptInfo = StringUtilx.fmt("Backoff was interrupted! [taskName: {}]", externalContext.actionName);
+			executeFailedAction(externalContext, e, interruptInfo);
 		}
+	}
+
+	/**
+	 * 判断异常链中是否携带「线程被请求中断」的语义。
+	 * <p>
+	 * 覆盖三种形态：
+	 * <ul>
+	 * <li>{@link InterruptedException} —— await/Future.get 等阻塞协调点被中断；</li>
+	 * <li>{@link InterruptedIOException} —— java.io 阻塞 IO 被中断；</li>
+	 * <li>{@link ClosedByInterruptException} —— NIO 通道因中断被强制关闭（此时重试必然继续失败）。</li>
+	 * </ul>
+	 * 沿 cause 链遍历（mainAction 可能把 IO 异常包装在 RuntimeException 中抛出），
+	 * 深度上限复用 {@link RetryPolicy} 的 MAX_CAUSE_DEPTH，防异常链成环导致死循环。
+	 */
+	private static boolean isInterruption(Throwable t) {
+		Throwable current = t;
+		for (int depth = 0; null != current && depth < RetryPolicy.MAX_CAUSE_DEPTH; depth++) {
+			if (current instanceof InterruptedException
+					|| current instanceof InterruptedIOException
+					|| current instanceof ClosedByInterruptException) {
+				return true;
+			}
+			Throwable cause = current.getCause();
+			// 防御异常链成环
+			if (cause == current) {
+				break;
+			}
+			current = cause;
+		}
+		return false;
 	}
 	
 	private <T> void executeFailedAction(IOHelperContext<T> externalContext, Exception exception) {

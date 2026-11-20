@@ -8,7 +8,6 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import pro.jk.ejoker.common.legacy.Suspendable;
 import pro.jk.ejoker.common.system.enhance.StringUtilx;
 import pro.jk.ejoker.common.system.extension.AsyncWrapperException;
 import pro.jk.ejoker.domain.AbstractAggregateRoot;
@@ -63,7 +62,6 @@ public class AggregateRootHandlerPool {
 					parameterTypes[0].getSimpleName());
 		}
 		
-		@Suspendable
 		public void handle(AbstractAggregateRoot<?> aggregateRoot, IDomainEvent<?> domainEvent) {
 			try {
 				handleReflectionMethod.invoke(aggregateRoot, domainEvent);
