@@ -116,13 +116,14 @@ public final class ControlTable {
             configValue = "";
         }
 
-        return configValue;
+        return configValue.trim();
     }
 
     private static String getConfigValue(RegisterTuple rt) {
         return CONFIG_CACHE_STORE.computeIfAbsent(rt, nRregisterTuple -> {
             String configValueThought = getConfigValueThought(nRregisterTuple.key, nRregisterTuple.envKey);
-            if(null == configValueThought || "" == configValueThought) {
+            // getConfigValueThought 返回值已做 trim，此处 isEmpty 判空即同时覆盖空串与纯空白串
+            if(null == configValueThought || configValueThought.isEmpty()) {
                 // 穿透获取没有得到结果，则从默认值去取
                 logger.info("\t ConfigValue[{}]={} ; <Use as default value>",
                         nRregisterTuple.key, nRregisterTuple.defaultValue);

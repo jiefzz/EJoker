@@ -50,11 +50,7 @@ public class RipenFuture<TResult> implements Future<TResult> {
 	public TResult get() throws InterruptedException {
 		
 		if(!isFutureReady.get()) {
-			try {
-				CountDownLatchWrapper.await(syncHandle);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
+			CountDownLatchWrapper.await(syncHandle);
 		}
 		if (hasException)
 			throw new AsyncWrapperException("Thread executed faild!!!", exception);
