@@ -161,7 +161,7 @@ public class EventCommittingContextMailBox {
 				} catch (RuntimeException ex) {
 					logger.error("{} run has unknown exception!!! [mailboxNumber: {}]",
 							this.getClass().getSimpleName(), number, ex);
-					DiscardWrapper.sleepInterruptable(1l);
+					DiscardWrapper.sleepQuietly(1l);
 					finishRun();
 				}
 			} else {

@@ -98,7 +98,7 @@ public class DefaultMQConsumerFunctionalTest {
 				int max=60000,min=10000;
 				int ran2 = (int) (Math.random()*(max-min)+min);
 				
-				DiscardWrapper.sleepInterruptable(ran2);
+				DiscardWrapper.sleepQuietly(ran2);
 				cxt.onFinished();
 			}).start();
 			
@@ -115,7 +115,7 @@ public class DefaultMQConsumerFunctionalTest {
 			TimeUnit.SECONDS.sleep(1l);
 		}
 		countDownLatch.await();
-		DiscardWrapper.sleepInterruptable(75000l);
+		DiscardWrapper.sleepQuietly(75000l);
 	}
 	
 }

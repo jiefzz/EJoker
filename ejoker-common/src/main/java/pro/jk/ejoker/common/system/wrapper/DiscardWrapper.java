@@ -9,29 +9,39 @@ import java.util.concurrent.TimeUnit;
 public class DiscardWrapper {
 	
 	/**
-	 * 
-	 * 若遇到中断请求，只会结束sleep调用，清除标志位，不对原流程造成影响，注意语义哦 <br /><br />
-	 * 方便那些不想写 try{} catch(InterruptedException) {} 语句块的
-	 * 
+	 * 若遇到中断请求，只结束 sleep 调用并<b>恢复中断标志位</b>，不向上抛异常。<br /><br />
+	 * 方便那些不想写 try{} catch(InterruptedException) {} 语句块的。<br /><br />
+	 * 注意：调用方有责任通过 {@code Thread.currentThread().isInterrupted()}
+	 * 感知中断并决定后续行为，否则取消请求会被本方法截断。<br />
+	 * 此外，本方法返回后若标志位已置位，后续任何可中断阻塞调用
+	 * (sleep / wait / take / lockInterruptibly 等)会立刻抛出
+	 * InterruptedException 并再次清除标志位。
+	 *
 	 * @param millis
 	 */
-	public static void sleepInterruptable(long millis) {
-		sleepInterruptable(TimeUnit.MILLISECONDS, millis);
+	public static void sleepQuietly(long millis) {
+		sleepQuietly(TimeUnit.MILLISECONDS, millis);
 	}
-	
+
 	/**
-	 * 
-	 * 若遇到中断请求，只会结束sleep调用，不对原流程造成影响，注意语义哦 <br /><br />
-	 * 方便那些不想写 try{} catch(InterruptedException) {} 语句块的
-	 * 
+	 * 若遇到中断请求，只结束 sleep 调用并<b>恢复中断标志位</b>，不向上抛异常。<br /><br />
+	 * 方便那些不想写 try{} catch(InterruptedException) {} 语句块的。<br /><br />
+	 * 注意：调用方有责任通过 {@code Thread.currentThread().isInterrupted()}
+	 * 感知中断并决定后续行为，否则取消请求会被本方法截断。<br />
+	 * 此外，本方法返回后若标志位已置位，后续任何可中断阻塞调用
+	 * (sleep / wait / take / lockInterruptibly 等)会立刻抛出
+	 * InterruptedException 并再次清除标志位。
+	 *
 	 * @param unit
 	 * @param millis
 	 */
-	public static void sleepInterruptable(TimeUnit unit, long millis) {
+	public static void sleepQuietly(TimeUnit unit, long millis) {
 		try {
 			unit.sleep(millis);
 		} catch (InterruptedException e) {
-			// do nothing
+			// 恢复中断标志位：InterruptedException 抛出时 JVM 已清除标志，
+			// 不补回则中断信号在此层被永久截断，上层 / 线程池无法感知取消。
+			Thread.currentThread().interrupt();
 		}
 	}
 

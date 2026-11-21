@@ -98,7 +98,7 @@ public class NettyRPCServiceImpl implements IRPCService {
 								closeHookTrigger.put(port, f.channel()::close);
 								RPCTuple currentRPCTuple;
 								while(null == (currentRPCTuple = portMap.get(port)))
-									DiscardWrapper.sleepInterruptable(TimeUnit.MILLISECONDS, 5l);
+									DiscardWrapper.sleepQuietly(TimeUnit.MILLISECONDS, 5l);
 								currentRPCTuple.initialFuture.trySetResult(null);
 							}					
 							// 监听服务器关闭监听
@@ -125,7 +125,7 @@ public class NettyRPCServiceImpl implements IRPCService {
 		} else {
 			if(waitFinished) {
 				while(null == (currentTuple = portMap.get(port)))
-					DiscardWrapper.sleepInterruptable(TimeUnit.MILLISECONDS, 10l);
+					DiscardWrapper.sleepQuietly(TimeUnit.MILLISECONDS, 10l);
 			}
 		}
 			
@@ -162,7 +162,7 @@ public class NettyRPCServiceImpl implements IRPCService {
 			} else {
 				int loop = 0;
 				while (loop++<5 && null == (nettySimpleClient = clientStore.get(uniqueKey)))
-					DiscardWrapper.sleepInterruptable(TimeUnit.MILLISECONDS, 20l);
+					DiscardWrapper.sleepQuietly(TimeUnit.MILLISECONDS, 20l);
 				if(null == nettySimpleClient) {
 					continue;
 				}

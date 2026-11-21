@@ -159,7 +159,7 @@ public class DefaultMQProducer extends org.apache.rocketmq.client.producer.Defau
 			onPasue4RepreparePredispatch.set(false);
 			
 			// waiting for a moment
-			DiscardWrapper.sleepInterruptable(TimeUnit.MILLISECONDS, 50l);
+			DiscardWrapper.sleepQuietly(TimeUnit.MILLISECONDS, 50l);
 		}
 		
 		public void awaitPredispatch() {

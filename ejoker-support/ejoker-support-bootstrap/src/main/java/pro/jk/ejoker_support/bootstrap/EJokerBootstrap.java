@@ -121,7 +121,7 @@ public class EJokerBootstrap {
 		
 		logger.info("Waiting for rebalance of all comsumer...");
 		while(true) {
-			DiscardWrapper.sleepInterruptable(1000l);
+			DiscardWrapper.sleepQuietly(1000l);
 			if(!domainExceptionConsumer.isAllReady()) {
 				continue;
 			}

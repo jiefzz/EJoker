@@ -46,7 +46,7 @@ public class MQConsumerMemoryAdapter implements ICQProvider, IConsumerWrokerAwar
 					if(shutdownFlag.get())
 						return;
 					if(32 < ++ i ) {
-						DiscardWrapper.sleepInterruptable(TimeUnit.MILLISECONDS, 1l);
+						DiscardWrapper.sleepQuietly(TimeUnit.MILLISECONDS, 1l);
 						i = 0;
 						readyFlag.compareAndSet(false, true);
 					}
@@ -58,7 +58,7 @@ public class MQConsumerMemoryAdapter implements ICQProvider, IConsumerWrokerAwar
 	@Override
 	public void shutdown() throws Exception {
 		while(finishedAmount.get() < sentAmount.get() )
-			DiscardWrapper.sleepInterruptable(TimeUnit.MILLISECONDS, 10l);
+			DiscardWrapper.sleepQuietly(TimeUnit.MILLISECONDS, 10l);
 		shutdownFlag.set(true);
 	}
 

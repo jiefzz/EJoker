@@ -173,7 +173,7 @@ public class ProcessingEventMailBox extends EasyCleanMailbox {
 			} catch (RuntimeException ex) {
 				logger.error("{} run has unknown exception. [aggregateRootId: {}]",
 						this.getClass().getSimpleName(), AggregateRootId, ex);
-				DiscardWrapper.sleepInterruptable(1l);
+				DiscardWrapper.sleepQuietly(1l);
 				finishRun();
 			}
 		} else {
