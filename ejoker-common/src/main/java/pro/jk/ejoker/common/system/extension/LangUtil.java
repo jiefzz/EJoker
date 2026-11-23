@@ -1,5 +1,7 @@
 package pro.jk.ejoker.common.system.extension;
 
+import pro.jk.ejoker.common.system.exceptions.InterruptedOnRuntime;
+
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -16,7 +18,7 @@ public final class LangUtil {
 		try {
 			return sfw.get();
 		} catch (InterruptedException ie) {
-			throw new AsyncWrapperException(ie);
+			throw new InterruptedOnRuntime(ie);
 		} catch (ExecutionException ee) {
 			Throwable cause = ee.getCause();
 			if(null == cause) {

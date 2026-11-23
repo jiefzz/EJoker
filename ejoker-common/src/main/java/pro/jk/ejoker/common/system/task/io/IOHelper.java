@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import pro.jk.ejoker.common.context.annotation.context.EService;
 import pro.jk.ejoker.common.system.enhance.StringUtilx;
+import pro.jk.ejoker.common.system.exceptions.InterruptedOnRuntime;
 import pro.jk.ejoker.common.system.extension.AsyncWrapperException;
 import pro.jk.ejoker.common.system.functional.IFunction;
 import pro.jk.ejoker.common.system.functional.IVoidFunction;
@@ -650,7 +651,10 @@ public class IOHelper {
 	private <T> void processTaskException(IOHelperContext<T> externalContext, Throwable exception) {
 		
 		Throwable ex = AsyncWrapperException.getActuallyCause(exception);
-		
+
+		if (exception instanceof InterruptedOnRuntime)
+			ex = exception.getCause();
+
 		// 【中断终态化】中断类异常（InterruptedException / InterruptedIOException / ClosedByInterruptException）
 		// 是上层请求停止的协作式取消信号，不是可重试的瞬时 IO 故障，须在重试判定之前拦截：
 		// 1. 恢复中断标志 —— LangUtil.await 捕获 InterruptedException 时 JVM 已清除标志，
