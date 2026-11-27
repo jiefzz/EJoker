@@ -40,6 +40,15 @@ public final class StringUtilx {
 	/**
 	 * 实现类似 slf4j 的占位填充功能。用以替换 String.format <br />
 	 * <br />
+	 * <b>【强制约束】占位符只支持空花括号「{}」，即花括号内不得包含任何字面字符。</b><br />
+	 * <br />
+	 * * 本方法<b>不处理</b>花括号内写了字面字符的占位符（如 {x}、{name}），此类模板不在支持范围内——<br />
+	 * * 实参充足时，此类占位符的内层字符会被静默丢弃（占位符替换语义使然，如 fmt("a{x}b", "X") 得到 "aXb"）；<br />
+	 * * 实参数量不足时，从第一个未消费的占位符起，模板剩余部分<b>按原样输出</b>（含花括号内字符）。<br />
+	 * <br />
+	 * * 正确用法：fmt("a={}, b={}", arg1, arg2)<br />
+	 * * 错误用法：fmt("a={x}, b={name}", ...)<br />
+	 * * 模板中需要输出字面 '{' / '}' 时，请使用反斜杠转义：\{ \}<br />
 	 * <br />
 	 * @param template
 	 * @param args
@@ -91,8 +100,8 @@ public final class StringUtilx {
 			if(i < args.length && null != args[i])
 				sb.append(args[i]);
 			else if(i >= args.length) {
-				if(ly>0)
-					sb.append(chars, ly-1, chars.length-(ly-1));
+				// 实参不足：从未消费的占位符开头（lx，即本轮 '{' 的位置）起，模板剩余部分按原样输出
+				sb.append(chars, lx, chars.length-lx);
 			}
 		} while (i++ < args.length);
 		return sb.toString();

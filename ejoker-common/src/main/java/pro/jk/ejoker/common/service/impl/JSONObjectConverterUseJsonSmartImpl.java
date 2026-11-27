@@ -32,7 +32,7 @@ public class JSONObjectConverterUseJsonSmartImpl implements IJSONObjectConverter
 			return new JSONArray();
 		// maybe is jsonObject or maybe is jsonArray
 		Object treeStructure = cu.getTreeStructure(object, tr);
-		if(treeStructure instanceof JSONObject)
+		if(treeStructure instanceof JSONArray)
 			return (JSONArray )treeStructure;
 		throw new RuntimeException("Revert target is not a instance of JSONArray, Maybe you should use convert()");
 	}
