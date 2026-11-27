@@ -226,4 +226,118 @@ public class IOHelperStage0Test {
 		assertSame(original, captured.get().getCause(),
 				"终态异常应可通过 getCause() 还原出原始 IOException");
 	}
+
+	/**
+	 * faildAction 是普通通知 hook：它自身抛出 RuntimeException 时，不得重放 mainAction、
+	 * 不得改走 completeAction，也不得把 hook 异常当作新的任务异常向外抛出。
+	 * 进入 hook 前上下文必须已经终态化，否则 hook 异常会再次打开外层 do/while 的重放窗口。
+	 */
+	@Test
+	public void testFailedActionFailureIsIsolatedAfterTerminalState() {
+
+		AtomicInteger mainActionInvocations = new AtomicInteger(0);
+		AtomicInteger completeInvocations = new AtomicInteger(0);
+		AtomicInteger failedInvocations = new AtomicInteger(0);
+		AtomicReference<Exception> captured = new AtomicReference<>();
+		AtomicReference<IOHelper.IOHelperContext<Void>> capturedContext = new AtomicReference<>();
+		IOExceptionOnRuntime original = IOExceptionOnRuntime.encapsulation(new IOException("original io failure"));
+
+		ioHelper.tryAsyncAction2(
+				"FailedActionThrows",
+				() -> {
+					guardReplay(mainActionInvocations, "失败 hook 异常隔离");
+					throw original;
+				},
+				() -> completeInvocations.incrementAndGet(),
+				NO_CONTEXT,
+				(c, e, msg) -> {
+					failedInvocations.incrementAndGet();
+					captured.set(e);
+					capturedContext.set(c);
+					throw new IllegalStateException("faildAction blew up");
+				});
+
+		assertEquals(1, mainActionInvocations.get(), "faildAction 抛异常不得重放已经终态化的 mainAction");
+		assertEquals(1, failedInvocations.get(), "faildAction 不得因自身异常被重复调用");
+		assertEquals(0, completeInvocations.get(), "任务已经失败，不得因 hook 异常补调 completeAction");
+		assertSame(original, captured.get(), "hook 异常不得替换回调收到的原始任务异常");
+		assertTrue(capturedContext.get().isFinish(), "调用 faildAction 前必须已经完成终态化");
+	}
+
+	/**
+	 * contextInfo 允许为 null。日志上下文缺失不得演化成 NPE，更不能掩盖原始任务失败。
+	 */
+	@Test
+	public void testNullContextInfoDoesNotMaskTerminalFailure() {
+
+		AtomicInteger mainActionInvocations = new AtomicInteger(0);
+		AtomicReference<Exception> captured = new AtomicReference<>();
+		AtomicReference<IOHelper.IOHelperContext<Void>> capturedContext = new AtomicReference<>();
+		IOExceptionOnRuntime original = IOExceptionOnRuntime.encapsulation(new IOException("failure with null context"));
+
+		ioHelper.tryAsyncAction2(
+				"NullContextInfo",
+				() -> {
+					guardReplay(mainActionInvocations, "null contextInfo 终态");
+					throw original;
+				},
+				() -> { },
+				null,
+				(c, e, msg) -> {
+					captured.set(e);
+					capturedContext.set(c);
+				});
+
+		assertEquals(1, mainActionInvocations.get(), "null contextInfo 不得导致任务被重放");
+		assertSame(original, captured.get(), "null contextInfo 不得掩盖原始任务异常");
+		assertEquals("[EmptyContextInfo:null]", capturedContext.get().contextInfo.trigger(),
+				"null contextInfo 应得到可诊断的安全占位值");
+	}
+
+	/**
+	 * contextInfo 是调用方代码，其异常必须与任务异常隔离；记录日志时不得二次抛出并覆盖原异常。
+	 */
+	@Test
+	public void testThrowingContextInfoDoesNotMaskTerminalFailure() {
+
+		AtomicInteger mainActionInvocations = new AtomicInteger(0);
+		AtomicReference<Exception> captured = new AtomicReference<>();
+		AtomicReference<IOHelper.IOHelperContext<Void>> capturedContext = new AtomicReference<>();
+		IOExceptionOnRuntime original = IOExceptionOnRuntime.encapsulation(new IOException("failure with broken context"));
+
+		ioHelper.tryAsyncAction2(
+				"ThrowingContextInfo",
+				() -> {
+					guardReplay(mainActionInvocations, "异常 contextInfo 终态");
+					throw original;
+				},
+				() -> { },
+				() -> { throw new IllegalStateException("context unavailable"); },
+				(c, e, msg) -> {
+					captured.set(e);
+					capturedContext.set(c);
+				});
+
+		assertEquals(1, mainActionInvocations.get(), "contextInfo 抛异常不得导致任务被重放");
+		assertSame(original, captured.get(), "contextInfo 异常不得掩盖原始任务异常");
+		assertEquals("[EmptyContextInfo:error] context unavailable", capturedContext.get().contextInfo.trigger(),
+				"异常 contextInfo 应得到包含诊断信息的安全占位值");
+	}
+
+	/** 空白 contextInfo 同样应被归一化，避免日志出现无上下文信息的空串。 */
+	@Test
+	public void testBlankContextInfoUsesSafeFallback() {
+
+		IOHelper.IOHelperContext<Void> context = new IOHelper.IOHelperContext<>(
+				"BlankContextInfo",
+				successfulAction(new AtomicInteger(0)),
+				c -> { },
+				r -> { },
+				() -> " \t ",
+				null,
+				false,
+				RetryPolicy.none());
+
+		assertEquals("[EmptyContextInfo:blank]", context.contextInfo.trigger());
+	}
 }

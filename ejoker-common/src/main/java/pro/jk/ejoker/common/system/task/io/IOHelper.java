@@ -2,14 +2,12 @@ package pro.jk.ejoker.common.system.task.io;
 
 import static pro.jk.ejoker.common.system.extension.LangUtil.await;
 
-import java.io.IOException;
-import java.io.InterruptedIOException;
-import java.nio.channels.ClosedByInterruptException;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +25,30 @@ import pro.jk.ejoker.common.system.helper.Ensure;
 /**
  * 模拟IOHelper的实现
  * <br /> <a href="https://github.com/tangxuehua/ecommon/blob/master/src/ECommon/IO/IOHelper.cs">參考</a>
+ * <p>
+ * <b>中断处理原则（Stage 2 确立）</b>
+ * <p>
+ * 【职责切割】中断是发给某个线程的信号，只对被中断者生效。主线程（调用
+ * tryAsyncAction2 并阻塞等待 IO 结果的线程）在 await / 退避 sleep 上被中断时，
+ * 其职责边界是<b>强制退出</b>：异常上抛穿透 tryAsyncAction2，不执行任何 hook
+ * （faildAction/completeAction）、不退避不重试、抛出前恢复中断标志。已提交任务的
+ * Future 一概不管 —— 不 cancel、不等待、不追踪；任务侧是否还在执行、能否最终完成、
+ * 内部是否还嵌套着子任务，均不在主线程的职责之内。副作用结局未知，善后归中断发起方
+ * （停机流程/取消发起者），补偿必须幂等（消费方契约详见
+ * {@link pro.jk.ejoker.common.system.exceptions.InterruptedOnRuntime} 类 javadoc）。
+ * <p>
+ * 【归属判据】凭异常到达 catch 现场的<b>包装形态</b>判定，而非沿 cause 链找中断语义
+ * —— 后者丢失包装层级信息，无法区分中断发生在哪一侧：
+ * <ul>
+ * <li>直达的 {@link pro.jk.ejoker.common.system.exceptions.InterruptedOnRuntime} =
+ *     主线程自己的阻塞点被中断（全工程构造点受控：LangUtil.await 与本类的退避 sleep，
+ *     包装均发生在<b>当前线程栈</b>上）⇒ 强制退出；</li>
+ * <li>经 {@code ExecutionException} 信封送达的一切异常（哪怕解出的是 InterruptedException /
+ *     InterruptedIOException / ClosedByInterruptException）= 任务侧事实 —— 任务体在
+ *     <b>工作线程</b>上被中断，是「那一次执行被打断」，与「主线程被请求停止」无关 ⇒
+ *     作为<b>普通任务失败</b>交 {@link RetryPolicy#retryOn} 裁决，绝不给等待线程伪造中断标志。</li>
+ * </ul>
+ * 判据是<b>类型</b>不是 cause：无 cause 的 InterruptedOnRuntime 同样强制退出。
  * 
  * @author JiefzzLon
  *
@@ -495,6 +517,8 @@ public class IOHelper {
 	 * @param completeAction - The closure will be executed while main action got success.
 	 * @param contextInfo - The closure about get context info.
 	 * @param faildAction - The closure will be executed while main action got timeout or exception.
+	 *                      【例外】主线程被中断的强制退出场景不触发本回调，而是从
+	 *                      tryAsyncAction2 直接抛出 InterruptedOnRuntime（契约详见其类 javadoc）。
 	 * @param retryWhenFailed - The flag about whether do retry while main action got failed.
 	 */
 	// #4.3
@@ -517,7 +541,7 @@ public class IOHelper {
 				);
 	}
 	
-	// #4.3
+	// #4.4
 	public <T> void tryAsyncAction2(
 			String actionName,
 			IFunction<Future<T>> mainAction,
@@ -550,9 +574,20 @@ public class IOHelper {
 			try {
 				task = externalContext.mainAction.trigger();
 				result = await(task); //task.get();
+			} catch (InterruptedOnRuntime ior) {
+				// 【中断强制退出】主线程自己阻塞点被中断的【归属证明】直达 catch 现场：
+				// 本类型全工程构造点唯一（LangUtil.await / executeRetryAction 退避），包装
+				// 发生在本线程栈上，与经 ExecutionException 信封送达的任务侧中断（任务侧事实）
+				// 泾渭分明。按中断契约：不执行任何 hook（faildAction/completeAction）、
+				// 不退避不重试、不 markFinish，异常原样上抛 —— 由外层 catch 的放行通道恢复
+				// 标志后穿透 do/while 与 tryAsyncAction2，强制终止本调用栈上的一切后续工作。
+				// 已提交任务的 Future 按既定原则不管、副作用结局未知（消费方语义见
+				// InterruptedOnRuntime 类 javadoc），善后归中断发起方。
+				throw ior;
 			} catch (Exception ex) {
 				// getActuallyCause 幂等：非包装异常原样返回、Error 根因原样返回、永不返回 null，
 				// 故无需 instanceof 预判，统一交给 processTaskException 按 Throwable 处理。
+				// 任务侧中断类异常亦经信封到达此处 —— 作为普通任务失败交 retryOn 裁决。
 				processTaskException(externalContext, AsyncWrapperException.getActuallyCause(ex));
 				return;
 			}
@@ -576,7 +611,8 @@ public class IOHelper {
 			// 即把【已经成功落库】的事件/消息再提交一遍。
 			// IO 既已成功，回调失败绝不能反过来触发 IO 重放，故 markFinish 必须提前。
 			externalContext.markFinish();
-			externalContext.completeAction.trigger(result);
+			if(null != externalContext.completeAction)
+				externalContext.completeAction.trigger(result);
 
 //			if (result == null) {
 //				logger.error("Async task result is `null`!!! [taskName: {}, contextInfo: {}, retryTimes: {}]",
@@ -623,59 +659,58 @@ public class IOHelper {
 //				assert false;
 //			}
 		} catch (RuntimeException ex) {
+			// 【中断强制退出放行通道】内层分流 throw 的 InterruptedOnRuntime、以及
+			// executeRetryAction 退避包装上抛的 InterruptedOnRuntime 都会直达此处
+			// （它本身是 RuntimeException）。若不显式放行，将被本兜底吞掉：
+			// finishFlag 未置、do/while 继续 —— @stage0-fix 防御的「中断后重放
+			// mainAction」事故原样复发。此通道是中断契约的安全带。
+			// 放行前统一恢复中断标志：InterruptedException 抛出时 JVM 已清除标志，
+			// 包装上抛若不恢复即中断丢失（swallow-interrupt 反模式）；恢复动作幂等。
+			if (ex instanceof InterruptedOnRuntime) {
+				Thread.currentThread().interrupt();
+				throw ex;
+			}
+
+			if(externalContext.isFinish()) {
+				logger.error("Failed to execute the completeAction!!! [taskName: {}, contextInfo: {}]",
+						externalContext.actionName, externalContext.contextInfo.trigger(), ex);
+				return;
+			}
 			logger.error("Failed to execute the taskContinueAction!!! [taskName: {}, contextInfo: {}, isMainActionFinished: {}]",
 					externalContext.actionName, externalContext.contextInfo.trigger(), (null == result ? "no" : "yes"), ex);
 			// 原注释: 「这里不再做出处理，会有别的问题吗？？」
 			// 回答: 在 @stage0-fix 之后，这里只记日志不再处理是【安全】的 ——
-			// 能走到本 catch 的运行时异常只有 completeAction 或 contextInfo 抛出这两种
-			// （mainAction/await 的异常已被内层 catch 交给 processTaskException 后 return，
-			//   cancelled 分支的 executeFailedAction 自带 try-catch）。
+			// 能走到本兜底的运行时异常只有 completeAction / contextInfo /
+			// processTaskException 内 logger 语句这三种（mainAction/await 的异常已被
+			// 内层 catch 分流：中断形态经放行通道上抛、其余交给 processTaskException
+			// 后 return；cancelled 分支的 executeFailedAction 自带 try-catch）。
 			// 而 markFinish() 已先于 completeAction 执行，finishFlag 已置 true，
 			// 外层 do/while(!isFinish()) 必然退出，不会重放已经成功的 IO。
 			// 遗留风险1: completeAction 失败意味着"IO 成功但后续业务动作没做"，此处仅记日志，
 			//   调用方无从感知。属于 Stage 2（终态出口）范围，不在 Stage 0 内。
-			// 遗留风险2: 本 catch 的日志语句自身会调用 contextInfo.trigger()，若异常正是它抛出的，
-			//   则会二次抛出并逃逸出本方法。属既有问题，未在本次改动范围内。
 		}
 	}
 
 	/**
-	 * 异常终态化处理入口。入参已由 {@link #taskContinueAction} 解过一层包，
-	 * 此处防御性再解一次（{@link AsyncWrapperException#getActuallyCause} 幂等），
-	 * 保证后续判定（isInterruption / retryOn / faildAction）面对的是最内层 Throwable。
+	 * 任务侧失败的统一处理入口（不含等待侧中断 —— 那由 taskContinueAction 的前置
+	 * catch 分流并强制退出，到不了此处）。入参已由 {@link #taskContinueAction} 解过
+	 * 一层包，此处防御性再解一次（{@link AsyncWrapperException#getActuallyCause} 幂等），
+	 * 保证后续判定（取消 / retryOn / faildAction）面对的是最内层 Throwable。
+	 * <p>
+	 * 任务侧中断类异常（任务体在【工作线程】上被中断、经 ExecutionException 信封
+	 * 送达的 InterruptedException / InterruptedIOException / ClosedByInterruptException 等）
+	 * 在此作为【普通任务失败】交 {@link RetryPolicy#retryOn} 裁决（默认黑名单不含
+	 * 中断类，判为可重试）—— 任务侧中断是「那一次执行被打断」，与「主线程被请求
+	 * 停止」无关，重试语义与其它瞬时故障一致，且绝不给本线程伪造中断标志。
 	 * <p>
 	 * 入参可能是任意 Throwable，包括 Error 根因（OOM/StackOverflowError 等经
 	 * FutureTask 捕获包装后在此解出）——Error 交由 {@link RetryPolicy#retryOn}
 	 * 判定为不可重试，一次进入终态，绝无强转 Exception 的环节。
 	 */
 	private <T> void processTaskException(IOHelperContext<T> externalContext, Throwable exception) {
-		
+
 		Throwable ex = AsyncWrapperException.getActuallyCause(exception);
 
-		if (exception instanceof InterruptedOnRuntime)
-			ex = exception.getCause();
-
-		// 【中断终态化】中断类异常（InterruptedException / InterruptedIOException / ClosedByInterruptException）
-		// 是上层请求停止的协作式取消信号，不是可重试的瞬时 IO 故障，须在重试判定之前拦截：
-		// 1. 恢复中断标志 —— LangUtil.await 捕获 InterruptedException 时 JVM 已清除标志，
-		//    若不恢复，do/while 之上的调用栈对「线程已被请求停止」失去感知；
-		// 2. 走终态失败而非退避重试 —— markFinish 保证外层 do/while(!isFinish()) 退出，
-		//    不会在被中断的线程上重放 mainAction，也不会在退避 sleep 上继续空耗重试预算。
-		if (isInterruption(ex)) {
-			logger.error("Async task was interrupted, treat it as a terminal failure without retry. [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
-					externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, ex.getMessage(), ex);
-			String interruptInfo = StringUtilx.fmt("Async task was interrupted! [taskName: {}]", externalContext.actionName);
-			// 先终态化（markFinish + faildAction 通知）再恢复中断标志：
-			// faildAction 必须在「无标志」的线程上执行 —— 若先置位，回调内的任何阻塞调用
-			// （sleep/get/latch.await）会立刻抛 InterruptedException 并被 executeFailedAction
-			// 的 catch 吞掉，善后逻辑执行到一半。标志在 do/while 退出前恢复即可，
-			// tryAsyncAction2 返回后的上层调用栈仍能感知「线程已被请求停止」。
-			// faildAction 侧如需区分中断，凭 exception 类型判断，不依赖线程标志。
-			executeFailedAction(externalContext, ex, interruptInfo);
-			Thread.currentThread().interrupt();
-			return;
-		}
-		
 		// 【取消终态化】future.get() 对已取消任务抛 CancellationException（await 不拦截它，
 		// 原样到达此处）。取消是上层放弃本次任务结果的信号，同样不是可重试的 IO 故障。
 		// 默认黑名单因 CancellationException 继承 IllegalStateException 而「碰巧」判其
@@ -725,51 +760,16 @@ public class IOHelper {
 		try {
 			TimeUnit.MILLISECONDS.sleep(backoffMillis);
 		} catch (InterruptedException e) {
-			// 退避期间被中断：直接终态化，不再向上抛 RuntimeException。
-			// 原实现 throw new RuntimeException(e) 会从 processTaskException 逃逸到
-			// taskContinueAction 的外层 catch(RuntimeException) 被吞掉，且 finishFlag 未置，
-			// 外层 do/while(!isFinish()) 将重放 mainAction —— 相当于在线程刚被请求停止的
-			// 背景下把 IO 主动作再执行一遍（progress.md 遗留项 M-5 的另一半）。
-			logger.error("Backoff sleep was interrupted, abort retrying and treat it as a terminal failure. [taskName: {}, contextInfo: {}, retryTimes: {}, errorMsg:{}]",
-					externalContext.actionName, externalContext.contextInfo.trigger(), externalContext.currentRetryTimes, e.getMessage(), e);
-			String interruptInfo = StringUtilx.fmt("Backoff was interrupted! [taskName: {}]", externalContext.actionName);
-			// 先终态化（markFinish + faildAction）再恢复标志，避免回调在带标志的线程上
-			// 执行时阻塞调用被立刻打断、善后做一半（同 processTaskException 中断分支）。
-			executeFailedAction(externalContext, e, interruptInfo);
-			Thread.currentThread().interrupt();
+			// 退避 sleep 同为主线程自己的阻塞点，被中断即【中断强制退出】场景：
+			// 包装为 InterruptedOnRuntime 上抛（标志恢复由 taskContinueAction 外层
+			// catch 的放行通道统一执行），不执行任何 hook、不退避不重试。
+			// 历史演进：stage0 时代此处走「终态化 + 恢复标志」收尾（progress.md M-5）；
+			// 中断契约改为强制退出后，终态化路径整体退役 —— 异常经放行通道穿透
+			// do/while 即完成退出，不存在「吞掉后 finishFlag 未置而重放」的路径。
+			throw new InterruptedOnRuntime(e);
 		}
 	}
 
-	/**
-	 * 判断异常链中是否携带「线程被请求中断」的语义。
-	 * <p>
-	 * 覆盖三种形态：
-	 * <ul>
-	 * <li>{@link InterruptedException} —— await/Future.get 等阻塞协调点被中断；</li>
-	 * <li>{@link InterruptedIOException} —— java.io 阻塞 IO 被中断；</li>
-	 * <li>{@link ClosedByInterruptException} —— NIO 通道因中断被强制关闭（此时重试必然继续失败）。</li>
-	 * </ul>
-	 * 沿 cause 链遍历（mainAction 可能把 IO 异常包装在 RuntimeException 中抛出），
-	 * 深度上限复用 {@link RetryPolicy} 的 MAX_CAUSE_DEPTH，防异常链成环导致死循环。
-	 */
-	private static boolean isInterruption(Throwable t) {
-		Throwable current = t;
-		for (int depth = 0; null != current && depth < RetryPolicy.MAX_CAUSE_DEPTH; depth++) {
-			if (current instanceof InterruptedException
-					|| current instanceof InterruptedIOException
-					|| current instanceof ClosedByInterruptException) {
-				return true;
-			}
-			Throwable cause = current.getCause();
-			// 防御异常链成环
-			if (cause == current) {
-				break;
-			}
-			current = cause;
-		}
-		return false;
-	}
-	
 	private <T> void executeFailedAction(IOHelperContext<T> externalContext, Throwable exception) {
 		executeFailedAction(externalContext, exception, exception.getMessage());
 	}
@@ -792,9 +792,33 @@ public class IOHelper {
 	    } catch (RuntimeException ex) {
 	        logger.error("Failed to execute the failedAction!!! [taskName: {}, contextInfo: {}]",
 	        				externalContext.actionName, externalContext.contextInfo.trigger(), ex);
-	    }
+			if (ex instanceof InterruptedOnRuntime) {
+				throw ex;   // 中断必须放行(契约要求),其余异常不掩盖原始根因
+			}
+		}
 	}
-	
+
+	/**
+	 * 对这两个 hook ( completeAction / failAction ) 的推荐契约
+	 * <br />
+	 * <pre>
+	 * IOHelper 是底层通用组件，明确：
+	 *
+	 * completeAction 只在 I/O 成功后调用一次。
+	 * failAction 只在 I/O 失败后调用一次。
+	 * completeAction 抛异常：
+	 *   不调用 failAction；
+	 *   不改变已经成功的事实；
+	 *   记录或按 API 契约传播。
+	 * failAction 抛异常：
+	 *   不再次调用 failAction；
+	 *   不覆盖原始异常；
+	 *   记录日志，或作为原始异常的 suppressed。
+	 * hook 不负责框架必须保证的资源清理。
+	 * </pre>
+	 * 文档明确 hook 是否允许抛异常，以及异常在哪个线程、由谁处理。
+	 * @param <T>
+	 */
 	public static class IOHelperContext<T> {
 
 		/**
@@ -855,12 +879,29 @@ public class IOHelper {
 			Ensure.notNull(mainAction, "mainAction");
 			Ensure.notNull(loopAction, "loopAction");
 			Ensure.notNull(retryPolicy, "retryPolicy");
+
+			// 保证不受用户传入不安全闭包的影响
+			IFunction<String> contextInfoSafeFunc = () -> {
+				try {
+					String realInfo;
+					if (null == contextInfo) {
+						return "[EmptyContextInfo:null]";
+					} else if (StringUtils.isBlank(realInfo = contextInfo.trigger())) {
+						return "[EmptyContextInfo:blank]";
+					} else {
+						return realInfo;
+					}
+				} catch (Exception e) {
+					logger.error("Failed to get contextInfo!!! [taskName: {}]", actionName, e);
+					return "[EmptyContextInfo:error] " + e.getMessage();
+				}
+			};
 			
 			this.actionName = actionName;
 			this.mainAction = mainAction;
 			this.loopAction = loopAction;
 			this.completeAction = completeAction;
-			this.contextInfo = contextInfo;
+			this.contextInfo = contextInfoSafeFunc;
 			this.faildAction = faildAction;
 			
 			this.retryWhenFailed = retryWhenFailed;

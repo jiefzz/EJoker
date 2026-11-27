@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -276,8 +277,10 @@ public class IOHelperStage1Test {
 				"CancelledFuture",
 				() -> {
 					mainActionInvocations.incrementAndGet();
-					// 模拟 future.get() 对已取消任务抛出的形态（await 不包装 CancellationException，原样到达 processTaskException）
-					throw new CancellationException("future was cancelled");
+					// 使用真实已取消 Future，覆盖 get() -> CancellationException -> processTaskException 的完整链路。
+					CompletableFuture<Void> cancelledTask = new CompletableFuture<>();
+					cancelledTask.cancel(true);
+					return cancelledTask;
 				},
 				r -> { },
 				NO_CONTEXT,
