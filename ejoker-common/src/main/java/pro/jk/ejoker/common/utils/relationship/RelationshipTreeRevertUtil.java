@@ -148,7 +148,7 @@ public class RelationshipTreeRevertUtil<ContainerKVP, ContainerVP> extends Abstr
 			revertedResult = baseTypeConvert(definedClazz, serializedValue);
 		} else if (definedClazz.isEnum()) {
 			// 枚举还原
-			if(!String.class.equals(serializedValue)) {
+			if(String.class.equals(serializedValue)) {
 				revertedResult = revertIntoEnumType(definedClazz, (String )serializedValue);
 			} else {
 				logger.warn("Enum data should represent as a String!");
